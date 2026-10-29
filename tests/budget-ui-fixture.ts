@@ -1,0 +1,11 @@
+import type { Budget, BudgetEntry } from "../lib/budget";
+const web = { title:"Published room rates",url:"https://example.com/room-rates",documentId:null,documentRevision:null,checkedAt:"2026-10-27T12:00:00.000Z",detail:"Room rates for two guests. Dates and availability still need confirmation." };
+const base:BudgetEntry={id:"stay",label:"Two nights in Florence",category:"stay",planItemIds:[],pricing:"estimated",unit:"room-night",quantity:2,unitMin:110,unitMax:140,assumptions:"One room shared by two adults. Final dates are not confirmed.",sources:[web]};
+export const tableBudget:Budget={currency:"EUR",scope:"party",travelers:2,limit:600,assumptions:"Estimate for two adults sharing one room. Prices may change with the final travel dates.",exclusions:["Flights to Italy","Optional shopping"],entries:[
+  base,
+  {...base,id:"train",label:"Local train tickets",category:"transport",pricing:"confirmed",unit:"ticket",quantity:2,unitMin:7.5,unitMax:7.5,assumptions:"Two adult tickets for the selected route.",sources:[{...web,title:"Saved train quote",url:null,documentId:"12fd9d92-d38d-4a5e-93c1-09747c76a964",documentRevision:2,detail:"The saved quote lists €7.50 per adult ticket."}]},
+  {...base,id:"food",label:"Meals and coffee",category:"food",unit:"day",quantity:3,unitMin:60,unitMax:90,assumptions:"Daily allowance for two adults, including coffee.",sources:[{...web,title:"Typical meal prices",url:"https://example.com/meals",detail:"Allowance based on the researched meal prices."}]},
+  {...base,id:"transit",label:"City transport",category:"transport",unit:"pass",quantity:2,unitMin:9,unitMax:9,assumptions:"One pass for each traveler.",sources:[{...web,title:"Transport fares",url:"https://example.com/fares",detail:"The researched pass costs €9 per person."}]},
+  {...base,id:"gallery",label:"Free gallery entry",category:"activities",pricing:"confirmed",unit:"entry",quantity:2,unitMin:0,unitMax:0,assumptions:"General admission is free under the cited conditions.",sources:[{...web,title:"Admission policy",url:"https://example.com/admission",detail:"General admission is free; optional exhibitions are excluded."}]},
+  {...base,id:"airport",label:"Airport transfer",category:"transport",pricing:"unknown",quantity:1,unit:"transfer",unitMin:null,unitMax:null,assumptions:"Arrival airport and time have not been chosen.",sources:[]},
+]};

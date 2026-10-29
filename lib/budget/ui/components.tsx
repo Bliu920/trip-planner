@@ -1,40 +1,10 @@
 "use client";
 import { useState } from "react";
-import { ExternalLink, Plus, Trash2 } from "lucide-react";
-import { budgetTotals, emptyBudget, formatMoney, totalLabel, type Budget, type BudgetEntry, type BudgetView } from "@/lib/budget";
+import { Plus, Trash2 } from "lucide-react";
+import { emptyBudget, formatMoney, type Budget, type BudgetEntry, type BudgetView } from "@/lib/budget";
 
 export const categories = { stay: "Stay", transport: "Transport", food: "Food", activities: "Activities", other: "Other costs" };
 const amount = (entry: BudgetEntry) => entry.pricing === "unknown" ? "Not estimated" : entry.unitMin === entry.unitMax ? formatMoney(entry.unitMin! * entry.quantity) : `${formatMoney(entry.unitMin! * entry.quantity)} to ${formatMoney(entry.unitMax! * entry.quantity)}`;
-export const scopeLabel = (budget: Budget) => budget.scope === "party" ? `${budget.travelers} travelers · EUR` : "Per person · EUR";
-
-export function BudgetDetails({ budget, onOpenDocument }: { budget: Budget; onOpenDocument: (id: string) => void }) {
-  const total = budgetTotals(budget);
-  return <>
-    <section className="bd-total" aria-label="Budget overview">
-      <span>{total.unknown ? "Priced subtotal" : "Estimated trip cost"}</span>
-      <strong>{totalLabel(budget)}</strong><p>{scopeLabel(budget)}</p>
-      <div className="bd-coverage">{total.priced} of {budget.entries.length} costs priced{total.unknown > 0 && <span>{total.unknown} {total.unknown === 1 ? "still needs" : "still need"} an estimate</span>}</div>
-      {budget.limit !== null && <p className="bd-limit">Your limit: {formatMoney(budget.limit)}{total.priced > 0 && total.max > budget.limit ? " · Estimate may exceed your limit" : total.unknown ? " · Missing prices may change the total" : ""}</p>}
-    </section>
-    {budget.assumptions && <p className="bd-assumptions">{budget.assumptions}</p>}
-    <div className="bd-groups">{Object.entries(categories).map(([key, label]) => {
-      const entries = budget.entries.filter(entry => entry.category === key);
-      if (!entries.length) return null;
-      return <section className="bd-group" key={key} aria-label={label}><h3>{label}</h3>{entries.map(entry => <details className="bd-cost" key={entry.id}>
-        <summary className="cursor-pointer"><span><strong>{entry.label}</strong><small>{entry.quantity} × {entry.unit}<span className={`bd-status bd-${entry.pricing}`}>{entry.pricing === "confirmed" ? "Price verified" : entry.pricing === "estimated" ? "Estimate" : "Price needed"}</span></small></span><span className="bd-amount">{amount(entry)}</span></summary>
-        <div className="bd-evidence">{entry.assumptions && <p>{entry.assumptions}</p>}{entry.pricing === "confirmed" && <p className="bd-muted">Verified for the cited conditions. This does not confirm a booking.</p>}
-          {entry.sources.map((source, index) => <article key={index} className="bd-source">
-            {source.url ? <a href={source.url} target="_blank" rel="noreferrer">{source.title}<ExternalLink size={12} /></a> : <strong>{source.title}</strong>}
-            <p>{source.detail}</p><small>Checked {new Date(source.checkedAt).toLocaleDateString("en-GB", { dateStyle: "medium", timeZone: "UTC" })}</small>
-            {source.documentId && <button type="button" className="cursor-pointer bd-textButton" onClick={() => onOpenDocument(source.documentId!)}>View document in Library{source.documentRevision ? ` (source version ${source.documentRevision})` : ""}</button>}
-          </article>)}
-          {!entry.sources.length && <p className="bd-muted">No price source added yet.</p>}
-        </div>
-      </details>)}</section>;
-    })}</div>
-    {!!budget.exclusions.length && <details className="bd-exclusions"><summary className="cursor-pointer">Not included ({budget.exclusions.length})</summary><ul>{budget.exclusions.map((text, index) => <li key={index}>{text}</li>)}</ul></details>}
-  </>;
-}
 
 function newEntry(): BudgetEntry {
   return { id: crypto.randomUUID(), label: "", category: "other", planItemIds: [], pricing: "unknown", unit: "item", quantity: 1, unitMin: null, unitMax: null, assumptions: "Price not researched yet.", sources: [] };

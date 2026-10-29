@@ -15,7 +15,8 @@ Plan owns arrangements. Budget references their stable IDs, but does not copy th
 | `lib/budget/index.ts`, `model.ts`, `checks.ts` | Public domain contract, validation, calculation, display formatting and derived price coverage |
 | `lib/budget/ui/index.tsx` | Public provider, compact summary card and full panel; composition and shared project state |
 | `lib/budget/ui/session.ts` | HTTP transport, revisions, retained retry identity, read cancellation and refresh coordination |
-| `lib/budget/ui/components.tsx`, `budget.css` | Grouped cost disclosure, evidence and controlled manual editing |
+| `lib/budget/ui/table.tsx`, `budget.css` | Unified cost table, inline calculation/source disclosure and read-view typography |
+| `lib/budget/ui/components.tsx` | Controlled manual budget editor |
 | `services/budgets/index.ts`, `database.ts`, `review.ts` | Scoped HTTP, storage transport and per-run missing-price publication policy |
 | `app/api/trips/[reference]/budget/route.ts` | GET and PUT adapters |
 
@@ -73,7 +74,15 @@ Plan item references are checked on proposal and commit. If an arrangement was r
 
 ## UI and scope
 
-Budget tab shows a compact heading, one prominent amount with its scope and missing-cost coverage, grouped cost rows, expandable evidence, and collapsed exclusions. The Plan card stays small and uses the same data. Desktop and 390px browser checks cover opening the tab from the card, source disclosure, manual limit/quantity edits, save feedback and synchronized totals.
+Budget tab shows a compact heading and one prominent estimated total, or estimated subtotal when prices are missing. Party scope appears once beside the amount, with an explicit missing-cost count and the saved spending limit where relevant. Read presentation is extracted into table.tsx; the existing controlled editor stays in components.tsx.
+
+The breakdown is one semantic table in saved entry order, with Cost, Qty, Amount and a Details action. Amounts use the existing money helpers and quantity is applied once. Repeated category labels, category cards, priced-item counters and the duplicated header scope are removed. Estimate/verified text remains quiet and visible, and unknown prices remain Not estimated rather than zero. A verified free entry still displays €0.
+
+Each row has an independently controlled native button with aria-expanded and aria-controls. Clicking Details inserts an inline spanning row containing the calculation, price conditions, sources, UTC checked dates and document/version actions. Source links use safe external-link attributes. Calculations and sources are not mounted until that row is opened. A missing price shows its saved explanation, not a fabricated formula. Expanded content is a table band rather than another card. CostEvidence is an internal display boundary reused by the row and rendering tests.
+
+Estimate-wide assumptions and exclusions live under the collapsed Budget details disclosure. Edit budget remains in the header; Reload is shown for error/pending-save recovery, rather than ordinary browsing. Existing validation, revision capture, retained retries and manual editing remain unchanged. Day spending and the Plan card retain their independent presentations and the same authoritative totals.
+
+The table uses the app's system font and horizontal separators. Mobile retains all columns; smaller quantity/amount/action widths and 44px Details targets keep it within a 317px content area at a 390px viewport. Long labels and evidence wrap, while the Details word remains intact. No new focus rings are introduced.
 
 Version one excludes expense tracking, payment processing, booking, automatic currency conversion and automatic scheduled price refreshes. The editor can add URL evidence; document citations inserted by the agent are retained and can be opened through Library. Source applicability and completeness remain agent/user judgments, not guarantees from JSON validation.
 
@@ -149,3 +158,11 @@ The day spending card is collapsed by default with only its subtotal, party scop
 readBudget supports full, summary, category, entry and Plan-link selections from effective drafts or the pinned saved base. createBudget initializes an absent estimate; editBudget applies atomic scope/limit/assumption/exclusion or entry operations. Omitted fields preserve original values and evidence timestamps. recordReview comes after content operations and binds to the host's effective Plan under the existing review persistence model. Requirements-aware durable review fingerprints remain deferred.
 
 Structurally valid drafts can temporarily contain missing Plan links during coordinated edits; inspection exposes these blockers and final publication rejects newly staged invalid links. Routine costs still need evidence-backed numeric ranges, and existing exceptional missing-price recovery stays available. Price coverage and initial-draft readiness are derived findings, not new stored Budget fields.
+
+### Unified table verification, October 29, 2026
+
+Local synthetic fixture checks cover mixed estimates, exact prices, known free entry and unknown transfer. The priced subtotal is €433 to €583, with one unknown excluded. Eight focused budget UI/session/day tests passed, including actual rendered table semantics, six independent disclosure controls, exact quantity totals, safe source links, document version labels and all-unknown behavior.
+
+Browser review used the real BudgetProvider and BudgetPanel with an isolated in-memory HTTP fixture. Verified desktop/mobile source expansion, keyboard toggling, calculation, missing-price explanation, document callback, and a spending-limit edit from €600 to €650 with the total unchanged. Default browsing has one table and no Reload control. Mobile Details targets remain 44px high, labels stay on one line and the page has no horizontal overflow. No real budget records or model calls were used. Temporary route removed after review.
+
+Final lint, typecheck and all eight focused tests passed after the last presentation refinements and fixture cleanup. Default-table screenshot: `/private/tmp/budget-table.png`.

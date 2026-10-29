@@ -6,7 +6,8 @@ import { ArrowUpRight } from "lucide-react";
 import { budgetTotals, totalLabel } from "@/lib/budget";
 import { notifyTripChanged, subscribeTripChanges } from "@/lib/trips";
 import { BudgetSession } from "./session";
-import { BudgetDetails, BudgetForm, scopeLabel } from "./components";
+import { BudgetForm } from "./components";
+import { BudgetDetails } from "./table";
 import "./budget.css";
 import { DayBudgetSummary } from "./day";
 
@@ -56,9 +57,9 @@ export function BudgetPanel({ onOpenChat, onOpenDocument, onAvailabilityChange }
   // Compose independently usable views.
   return <div className="bd-panel" aria-busy={state.busy || state.loading}>
     {confirmation}
-    <header className="bd-header"><div><h2>Budget</h2><p>{budget ? scopeLabel(budget) : "Costs and the sources behind them"}</p></div><div className="bd-actions">
+    <header className="bd-header"><h2>Budget</h2><div className="bd-actions">
       {!editing && <button type="button" className="cursor-pointer bd-button" disabled={locked || !state.data} onClick={() => setEditing(true)}>Edit budget</button>}
-      <button type="button" className="cursor-pointer bd-textButton" disabled={state.loading || state.busy} onClick={() => void reload()}>Reload</button>
+      {(state.error || state.pending) && <button type="button" className="cursor-pointer bd-textButton" disabled={state.loading || state.busy} onClick={() => void reload()}>Reload</button>}
     </div></header>
     <span className="bd-saveStatus" role="status">{state.busy ? "Saving..." : state.loading ? "Loading budget..." : state.notice}</span>
     {state.error && <div className="bd-error" role="alert"><p>{state.error}</p>{state.pending && <><p>Your edit is retained. Retry the same save, or reload to discard it.</p><button type="button" className="cursor-pointer bd-button" disabled={state.busy} onClick={async () => { if (await session.retry()) { setEditing(false); notifyTripChanged(reference); } }}>Retry save</button></>}</div>}
