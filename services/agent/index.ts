@@ -10,13 +10,14 @@ import { ActionRun, actionKindOf, blocked } from "./actions";
 export type { AgentEnvironment } from "./contracts";
 export class AgentConfigurationError extends Error { }
 export const DEFAULT_MODEL = "gpt-6.1-terra";
+export const SUPPORTED_MODELS: readonly string[] = [DEFAULT_MODEL, "gpt-6-luna"];
 export const MAX_AGENT_STEPS = 30;
 export const RECOVERY_STEPS = 3;
 export function agentModel() {
   const configured = process.env.OPENAI_MODEL?.trim() || DEFAULT_MODEL;
-  if (configured !== DEFAULT_MODEL)
+  if (!SUPPORTED_MODELS.includes(configured))
     throw new AgentConfigurationError(
-      `Unsupported OPENAI_MODEL. Use ${DEFAULT_MODEL}; review the Agent guide before changing providers.`,
+      `Unsupported OPENAI_MODEL. Use ${SUPPORTED_MODELS.join(" or ")}; review the Agent guide before changing providers.`,
     );
   return configured;
 }

@@ -1,7 +1,7 @@
 # Plan
 
 Status: implemented locally. Apply the forward migrations before using it with hosted storage.
-Last updated: 2026-10-28.
+Last updated: 2026-10-29.
 
 ## Responsibility
 
@@ -68,7 +68,7 @@ The authoritative TypeScript contract is `lib/plan/types.ts`. The strict runtime
 | Stay | Location and either explicit check-in/out dates or nights following named days. Never occupies the activity sequence. |
 | Item common fields | ID, title, rationale, optional flag, nullable user keep instruction, nullable reported reservation state |
 | Timing | Period, start/end time points, or a bounded duration range. Each time point distinguishes fixed from suggested. Two endpoints determine duration instead of duplicating it. |
-| Location | Catalog place, another item's location, travel endpoint, user-specified location, or general area |
+| Location | Catalog place, another item's location, travel endpoint, user-specified location, general area, or sourced restaurant |
 | Basis | User, catalog, research or assumption; actual sources and explanation. Assumptions need an explanation. |
 | Source | Saved user message, original notes, upload, exact document content revision, catalog field or external URL/access time |
 | Note | Assumption, uncertainty, conflict or action, optional item references and sources |
@@ -79,7 +79,7 @@ Unscheduled items remain in `items` without day membership. Removing membership 
 
 ## Validation
 
-`inspectPlan` checks the strict schema, three unique days, stable item identity, unique membership, dangling and cyclic locations, catalog existence, stay coverage, real dates, timing order and note references. New named attractions and restaurants must come from `italy.json`. User-supplied existing venues can be represented with user evidence; general meal areas are allowed.
+`inspectPlan` checks the strict schema, three unique days, stable item identity, unique membership, dangling and cyclic locations, catalog existence, stay coverage, real dates, timing order and note references. Named attractions come from `italy.json`. Meals prefer suitable supplied restaurants, cafes or food markets, with a narrowly scoped researched-restaurant fallback. New generic or missing-location meals fail validation; explicit user-arranged meals can carry user evidence. Unchanged legacy generic meals produce warnings during unrelated edits.
 
 Compared with the saved Plan, active bookings cannot be deleted, protected locations/times cannot silently change, and shifting itinerary dates does not shift an existing relative fixed appointment. Explicit current user authorization is required for protected agent edits. The model interprets that authorization; structural validation cannot establish what arbitrary prose truly means. Direct UI edits cannot bypass protected-fact checks.
 
@@ -165,14 +165,15 @@ Updated 2026-10-28. PlanPresentation owns one overview/expanded-day navigation s
 
 | File | Responsibility |
 |---|---|
-| `presentation/index.tsx` | Persistent trip summary, overview/day navigation, selected activity, reading-position restoration and transition identity |
+| `presentation/index.tsx` | Persistent trip summary and cards, overview/day navigation, selected activity and non-scrolling focus |
+| `presentation/motion.ts` | Measured live-card position/width animation, interruption, current scroll preservation, stage height stabilization and cleanup |
 | `presentation/components.tsx` | The same DayCard and Timeline in both states, with expansion and activity-selection controls |
-| `day-view/index.tsx` | Expanded left card and right activity/map/Budget composition, linked focus and mobile detail navigation |
+| `day-view/index.tsx` | Activity/map/Budget detail column, linked focus and deferred mobile detail navigation |
 | `day-view/details.tsx` | Selected activity's time, duration, location, price if supplied, photo, description, booking requirements, sources and explicit edit action |
 | `day-view/map.tsx` | Leaflet lifecycle, numbered pins, selected place, directions, fit/zoom and loading/retry |
 | `day-view/styles.css` | Shared palette and responsive expanded-day layout |
 
-The trip summary remains mounted while other day cards disappear and the selected card expands to the left. Scoped React ViewTransition identities connect the same day in both states. Plan navigation uses its own transition type. Root and old snapshots do not crossfade, so the header/background stay steady and one opaque day snapshot moves for 360ms. The right column appears with a small, mostly opaque reveal; returning day cards gently regain opacity. This avoids overlapping fades that previously made expansion flash. Reduced-motion CSS removes these animations; unsupported browsers retain all interactions. The approved card imagery, timeline, typography and colors have one owner. The old separate day sidebar and detailed Schedule renderer were removed.
+The trip summary and every DayCard remain mounted in one keyed content stage. Overview and expanded day use CSS layout states, not separate render branches. The selected live card animates from its measured current position and width to the new layout over 340ms. Both directions use the same motion owner; interrupted input samples the current animated rectangle before cancellation and continues from there. There are no root/page snapshot transitions, duplicate card snapshots or full-page fades. Other cards are hidden/inert while a day is open, then return gently. The latest detail column stays mounted but becomes invisible/inert on return, preserving its map until another day is selected. Temporary minimum stage height and start-aligned grid tracks avoid scroll clamping during the movement. Resize, reduced motion, completion, interruption and unmount release animation resources. The approved card imagery, timeline, typography and colors have one owner. The old separate sidebar and detailed Schedule renderer remain removed.
 
 | Action | Result |
 |---|---|
@@ -181,16 +182,52 @@ The trip summary remains mounted while other day cards disappear and the selecte
 | Select expanded activity | Update details and center its map pin, including repeated selection after fit/pan |
 | Select map pin | Update activity details, focus and reveal the matching timeline button |
 | Edit activity | Invoke Canvas's existing editor and save session |
-| All days | Restore overview scroll offsets and focus to the originating card/activity |
+| All days | Animate the current day back into overview, preserve the current scroll and focus its card/activity |
 
-An expanded day is anchored at the start of Plan so automatic browser scrolling cannot obscure the persistent summary during opening. Return restores the actual nested scroll containers and window position. Selection is local view state, not a new saved plan or document. Day and item IDs resolve against current data on every render. Removed or moved activities cannot retain stale details or invented pins. Day switches clear the activity selection. Successful normal edits preserve the expanded day and update its details.
+The header has one shared metadata/navigation slot. Its two overlapping grid layers both determine height; only the active layer is visible, exposed to assistive technology and interactive. Overview facts (including the narrow-screen day selector) are replaced in that slot by back/day navigation. Budget and title remain in place. No extra navigation row is inserted below the header. Card cover, visual-header and heading heights are identical across modes. Each open/close samples and preserves the current nested/window scroll position. Returning never restores a historical position or defaults an initially expanded preview to window y0. The current day stays selected in a narrow overview, including after switching days. Selection is local view state, not a new saved plan or document. Day and item IDs resolve against current data on every render. Removed or moved activities cannot retain stale details or invented pins. Day switches clear the activity selection. Successful normal edits preserve the expanded day and update its details.
 
 The existing `presentation/model.ts` projects saved Plan and catalog facts into optional Stop fields: coordinates, location, end time, photo, description, practical details and HTTP(S) evidence links. Referenced locations resolve from the same Plan. Missing coordinates, prices or duration stay unknown. Catalog hours and booking requirements are never treated as verified availability. Place-specific photos in details remain separate from illustrative fallback covers. The same day-cover image is not repeated beside itself in activity details.
 
-The right column shows a selected-activity detail card above one map and Budget's existing day-spending card. No activity is chosen arbitrarily on day opening. Secondary details and sources expand inside a bounded detail area so they cannot indefinitely push the map down. On narrow screens the columns stack; activity selection reveals details, and Day timeline returns to the selected activity. Native buttons preserve keyboard access. Editing and optional changes honor existing save locks; browsing stays usable.
+The right column shows a selected-activity detail card above one map and Budget's existing day-spending card. No activity is chosen arbitrarily on day opening. Selected activity details use a fixed 360px frame: a fixed 96px title/fact summary and an independently scrolling reading region. Title/edit controls stay outside scrolling. The heading allows two lines with the full name retained in its title/accessibility text, and facts have a fixed two-line area. Description, images, booking notes, optional actions and expanded evidence remain in the keyboard-focusable reading region. Scrollbar space and image height are reserved. Switching activities resets the reading position through the existing activity key. Short content leaves intentional whitespace. There is no empty 360px placeholder before an activity is selected. A fixed 52px map-caption row also prevents long/missing selected-place labels from moving day spending. On narrow screens the columns stack. Activity selection waits for card motion to finish before smoothly revealing details; Day timeline smoothly returns to the selected activity. Reduced motion uses immediate scrolling. Native buttons preserve keyboard access. Editing and optional changes honor existing save locks; browsing stays usable.
 
 Budget integration uses `renderDayContext(day)` through PlanEditor and Canvas. Workspace supplies Budget's provider-connected DayBudgetCard with the day's item IDs. Plan does not fetch, store or calculate prices. Subtotals, sources, missing prices and review state derive from the existing Budget snapshot. Whole-trip Budget remains in the persistent summary. See [Budget](budget.md).
 
 Leaflet is dynamically imported only in the browser. Cleanup removes maps, timers, observers and listeners. Serialized pin geometry avoids resets from unrelated view or Budget changes. Empty-location days show an explicit empty state and download no tiles. Pins describe places, not computed routes; directions open externally. OpenStreetMap attribution and origin-only referrers remain visible/configured. The public raster service is best-effort; loading, error and retry states are retained. Reference: https://operations.osmfoundation.org/policies/tiles/ (reviewed 2026-10-28).
 
-Verification: rendered expansion tests cover the persistent summary, no arbitrary activity selection, navigation versus editing, edit locks, missing facts, evidence, duplicate photo avoidance and empty days. Browser checks use actual workspace controllers and an ephemeral PGlite Rome fixture. They cover card/activity entry, return focus/scroll, both map-selection directions, real activity save, retained day state and desktop/mobile layouts. Local sample previews consume the same production components, with no paid AI or existing-trip writes. Final checks are recorded in the Plan expansion task.
+Verification: rendered expansion tests cover the persistent summary, no arbitrary activity selection, navigation versus editing, edit locks, missing facts, evidence, duplicate photo avoidance and empty days. Browser checks use actual workspace controllers and an ephemeral PGlite Rome fixture. They cover card/activity entry, return focus/scroll, both map-selection directions, real activity save, retained day state and desktop/mobile layouts. Local sample previews consume the same production components, with no paid AI or existing-trip writes. Round-trip motion verification additionally recorded 49 to 51 animation frames per completed move, confirming stable card DOM identity, monotonic horizontal movement and zero vertical/scroll changes in those desktop traces. A true interrupted return continued from a partially expanded 515px width. A scrolled mouse-return preserved window y57. Current checks are recorded in the Plan round-trip task.
+
+
+## Researched meal venues
+
+October 29, 2026: restaurant locations save a real venue label, street address, city, optional paired coordinates and a research basis containing web citations with checked timestamps. Only meals may use this venue type as their activity location; travel endpoints and day boundaries may refer to it. Named attractions and overnight stays retain their existing source rules. Supplied Italy records are unchanged; researched venues live in the trip's Plan JSON, with no migration or global catalog insert.
+
+`services/plans/venues.ts` validates that new restaurant facts cite URLs observed by this request's research tools and do not claim a future check date. Workspace validates before accepting a draft and again before commit. Direct saves may preserve unchanged saved restaurant evidence, but cannot inject new researched venues without observed sources. Unchanged evidence is compared independently of JSON object key order, retaining original dates across offline edits. This gate verifies provenance, not the semantic accuracy of a page or live table availability. Guides own venue suitability, opening checks and honest uncertainty.
+
+The day detail view displays the saved name, address, city and source links. Verified coordinates join the existing map; missing coordinates remain absent and are described as an unavailable map pin, without discarding the usable address. Catalog photos and daily cover fallback are unchanged. Replacing generic meals in old trips requires a subsequent planning edit.
+
+
+## Protection checks after reload
+
+October 29, 2026: Plan protection compares JSON structurally, ignoring object key order while retaining array order and exact values. Database JSONB ordering previously made an unchanged user-sourced note look edited after reload, blocking otherwise valid timetable changes with protected_note. The affected saved itinerary reproduced this failure on a read-only no-op check; the same check passes after correction. Booked locations, fixed times and genuinely changed user notes remain protected. This fix does not modify any saved trip automatically.
+
+
+## Contextual lodging and reminders
+
+October 29, 2026: removed the bottom Stays and unscheduled arrangements, Plan notes and Planning checks disclosures. Stored Plan data, protection rules and server validation are preserved. Day cards expose clickable overnight stays based on real night/date coverage. Selecting a stay opens its day context and retains the existing edit entry; dates/coverage remain editable through chat under the existing stay form behavior. Stays with unassigned nights and unscheduled booked, kept or fixed arrangements remain actionable near trip context. Ordinary unscheduled candidates are retained in data without becoming a bottom itinerary dump.
+
+Presentation derives action, conflict and uncertainty reminders for affected days and selected arrangements, with cited web links. Genuinely trip-wide reminders appear by the trip summary. Background assumptions are excluded from the reminder lists; provisional start dates are labeled explicitly. Item assumptions and source facts remain in the item's practical details. New supporting research and route reasoning belongs in Library documents under planning-documents. Existing legacy notes are not automatically rewritten, classified by prose or deleted. A relevant future agent edit can reorganize them using the new rules.
+
+The shared reminders component keeps source links and accessible list semantics consistent across trip/day/item contexts. Overnight buttons use stable IDs for selection and keyboard return. The server still rejects invalid saves, and the existing editor retains failure feedback and retry/reload controls. Validation output is available to the agent instead of rendered as a raw traveller checklist.
+
+## Overview timing and detailed scheduling
+
+October 29, 2026: the shared Timeline has two presentations of the same saved schedule. Overview labels consecutive period groups once in the existing time column. Period-only legacy records remain usable. Local clock starts derive Morning (06:00 before12:00), Afternoon (12:00 before18:00), Evening (18:00 onward) or Night (before06:00). Missing/unusable times remain Flexible. Saved order is preserved; a returning period after an intervening group receives another label. Omitted optional slots keep their position. Screen reader activity names retain their period even when its visible label is suppressed. Timeline connections continue between groups without adding rows or padding.
+
+Expanded DayCard passes detailed mode to the same mounted Timeline, retaining each saved clock and duration/end text. Overview suppresses exact Until labels. Existing StopDetails continues to display explicit start/end ranges. No end time is inferred from a duration. No persisted schema, timetable generation, save behavior, header or motion mechanism changes. Travel brief guidance keeps summaries at period level while retaining exact user commitments and the detailed saved timetable.
+
+Follow-up: timeline connectors remain continuous across all period boundaries. Period labels still appear once per consecutive group; changing the period does not interrupt the line.
+
+
+## Routes and researched hotels
+
+October 29, 2026: Plan now accepts sourced hotel stays with the restaurant-style web identity/address fields and host-issued map references. Supplied attractions and user bookings retain existing protections. Shared timing includes start plus maximum duration. Agent proposals, direct saves and commit check derived journeys; unverified drafts remain distinct from checked routes. See [Locations and routes](geo.md) for evidence, cache, matching and status behavior.

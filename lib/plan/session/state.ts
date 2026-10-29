@@ -117,7 +117,8 @@ export class PlanSession {
       this.patch({ data: { ...data, ...result.snapshot }, pending: null, notice: "Plan saved." });
       saved = true;
     } catch (error) {
-      this.patch({ error: message(error), failure: error instanceof PlanRequestError && error.status === 409 ? "conflict"
+      this.patch({ ...(error instanceof PlanRequestError && error.code === "PLAN_FEASIBILITY" ? { pending: null } : {}),
+        error: message(error), failure: error instanceof PlanRequestError && error.status === 409 ? "conflict"
         : error instanceof PlanRequestError && error.status >= 400 && error.status < 500 && error.status !== 408 ? "rejected" : "retryable" });
     } finally {
       this.patch({ busy: false });

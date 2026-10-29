@@ -1,9 +1,12 @@
 import "server-only";
+import { checkJourneys, inspectGeoSources, journeySummary } from "@/services/feasibility";
 import { REFERENCE_PATTERN } from "@/lib/trips/types";
 import { inspectPlan, type PlanSnapshot } from "@/lib/plan";
 import { loadDayCoverPhotos } from "@/services/catalog";
 import { places } from "./catalog";
 import { planRpc, PlanError } from "./database";
+import { inspectVenueSources } from "./venues";
+export { inspectVenueSources } from "./venues";
 export { PlanError } from "./database";
 export { places } from "./catalog";
 export function getPlan(reference: string) {
@@ -14,6 +17,7 @@ export async function savePlan(
   expectedRevision: number,
   value: unknown,
   requestId: string,
+  signal: AbortSignal = AbortSignal.timeout(25000),
 ) {
   const current = await getPlan(reference);
   const checked = inspectPlan(
@@ -21,6 +25,15 @@ export async function savePlan(
     places,
     current.revision === expectedRevision ? current.plan : null,
   );
+  if (checked.plan) checked.findings.push(...inspectVenueSources(checked.plan, current.plan, new Set()));
+  let journeys = null;
+  if (checked.plan && !checked.findings.some(finding => finding.severity === "error")) {
+    checked.findings.push(...await inspectGeoSources(reference, checked.plan, signal));
+    if (!checked.findings.some(finding => finding.severity === "error")) {
+      journeys = await checkJourneys(reference, checked.plan, places, signal);
+      checked.findings.push(...journeys.findings);
+    }
+  }
   if (!checked.plan || checked.findings.some((f) => f.severity === "error"))
     throw new PlanError(
       checked.findings
@@ -29,8 +42,9 @@ export async function savePlan(
         .slice(0, 5)
         .join(" "),
       400,
+      checked.findings.some(finding => finding.code === "journey_time" && finding.severity === "error") ? "PLAN_FEASIBILITY" : undefined,
     );
-  return planRpc<{ savedRevision: number; snapshot: PlanSnapshot }>(
+  const saved = await planRpc<{ savedRevision: number; snapshot: PlanSnapshot }>(
     "plan_save",
     {
       p_trip: reference,
@@ -39,6 +53,7 @@ export async function savePlan(
       p_request: requestId,
     },
   );
+  return { ...saved, journeys: journeys ? journeySummary(journeys) : null };
 }
 export async function handlePlan(request: Request, reference: string) {
   const headers = {
@@ -89,12 +104,13 @@ export async function handlePlan(request: Request, reference: string) {
     )
       throw new PlanError("Reload the plan before editing.", 400);
     return Response.json(
-      await savePlan(reference, body.revision, body.plan, body.requestId),
+      await savePlan(reference, body.revision, body.plan, body.requestId, request.signal),
       { headers },
     );
   } catch (error) {
     return Response.json(
       {
+        ...(error instanceof PlanError && error.code ? { code: error.code } : {}),
         error:
           error instanceof PlanError
             ? error.message

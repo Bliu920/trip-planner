@@ -12,6 +12,8 @@
 .activity-detail { margin: 0 6px 10px 29px; line-height: 1.65; overflow-wrap: anywhere; }
 .activity-detail a { text-decoration: underline; text-underline-offset: 3px; }
 .activity-detail li { margin-top: 4px; }
+.activity-call + .activity-call { border-top: 1px solid #e6e6df; margin-top: 10px; padding-top: 10px; }
+.activity-call > small { color: #77776f; font-size: 11px; }
 .activity-files { display: flex; flex-wrap: wrap; gap: 4px; margin: 2px 0 6px 23px; }
 .activity-files button { max-width: 100%; height: auto; white-space: normal; overflow-wrap: anywhere; text-align: left; }
 .activity-attempt { font-size: 11px; margin: 12px 6px 4px; }

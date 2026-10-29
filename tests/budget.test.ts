@@ -185,6 +185,9 @@ test("guides are allowlisted and initial instructions are loaded only when neede
   assert.ok(guidePrompt(true).includes(quality), "First planning always receives the full quality standard");
   assert.ok(!guidePrompt(false).includes(quality), "Later turns discover quality guidance on demand");
   assert.ok(guideCatalog.some(guide => guide.id === "plan-quality"));
+  assert.ok(guideCatalog.some(guide => guide.id === "planning-documents"));
+  assert.match(readGuide("planning-documents").content, /Research notes.md/);
+  assert.match(readGuide("planning-documents").content, /Planning decisions.md/);
 });
 
 test("budget endpoint rejects cross-site writes and anonymous SQL access", async () => {

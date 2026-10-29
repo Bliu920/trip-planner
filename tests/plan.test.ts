@@ -171,3 +171,31 @@ test("user-sourced notes cannot silently change under the same ID", () => {
   assert.ok(errors(next, old).some((f) => f.code === "protected_note"));
   assert.deepEqual(errors(next, old, ["access"]), []);
 });
+
+test("database key ordering cannot turn unchanged notes and bookings into protected edits", () => {
+  const original = examplePlan();
+  original.notes.push({ id: "user-note", kind: "uncertainty", text: "Confirm arrival time", relatedItemIds: ["visit-1"], sources: [{ type: "legacy_notes" }] });
+  const visit = original.items["visit-1"];
+  if (visit.kind !== "visit") return;
+  visit.reservation = { state: "booked", basis: user };
+  visit.timing.start = { date: null, time: "10:00", binding: "fixed", basis: user };
+  function reordered(value: unknown): unknown {
+    if (Array.isArray(value)) return value.map(reordered);
+    if (!value || typeof value !== "object") return value;
+    return Object.fromEntries(Object.entries(value).reverse().map(([key, child]) => [key, reordered(child)]));
+  }
+  const saved = reordered(original) as typeof original;
+  assert.deepEqual(errors(original, saved), []);
+  const changed = structuredClone(original); changed.days[1].title = "Changed independently";
+  assert.deepEqual(errors(changed, saved), []);
+  changed.notes[0].text = "Changed user fact";
+  assert.ok(errors(changed, saved).some(f => f.code === "protected_note"));
+  changed.notes[0] = original.notes[0];
+  const changedVisit = changed.items["visit-1"];
+  if (changedVisit.kind !== "visit") return;
+  changedVisit.timing.start!.time = "11:00";
+  assert.ok(errors(changed, saved).some(f => f.code === "protected"));
+  changedVisit.timing.start = visit.timing.start;
+  changedVisit.location = { type: "catalog", placeId: catalog[1].id };
+  assert.ok(errors(changed, saved).some(f => f.code === "protected"));
+});

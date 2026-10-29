@@ -72,7 +72,7 @@ inspectChanges reports affected IDs, blockers, price coverage, advisory first-pl
 
 Runtime context refreshes after each step instead of appending stale copies. It includes a bounded Travel brief and lightweight effective manifest. Complete Plan values up to 20,000 serialized characters and Budget values up to 16,000 are preloaded; larger values use explicit full/scoped reads. Already supplied current content counts as read. Selected binary originals are marked available only after the host actually loaded them into this request.
 
-Tool input is validated locally with reused JSON schema definitions. Provider normalization does not replace domain/source/protection validation. The catalog tools read the shared supplied Italy dataset; external research supplements it without inventing named recommendations. No arbitrary shell, filesystem, URL-fetch or SQL capability is exposed.
+Tool input is validated locally with reused JSON schema definitions. Provider normalization does not replace domain/source/protection validation. The catalog tools read the shared supplied Italy dataset; external research supplements it, including real sourced restaurant fallback when supplied meal venues are unsuitable. Named attractions remain catalog-backed. No arbitrary shell, filesystem, URL-fetch or SQL capability is exposed.
 
 Implementation lives in contracts.ts, tools.ts, artifact-tools.ts, feedback.ts and existing runtime/research/action modules. Workspace session.ts owns existing staging/persistence orchestration; artifacts.ts adapts V2 operations, draft.ts owns transient tokens/rejection obligations, and views.ts computes scoped reads and advisory quality findings. Pure domain operations live in lib/plan/operations.ts, lib/budget/operations.ts and services/documents/edits.ts.
 
@@ -92,14 +92,14 @@ The existing conversation lock prevents overlapping turns in one chat. Different
 
 ## Runtime and deployment
 
-Model: `gpt-6.1-terra` through the Responses API. Unsupported `OPENAI_MODEL` overrides fail before saving a user turn, with an actionable configuration error. Existing deprecated `gpt-5-mini` overrides must be changed.
+Default model: `gpt-6.1-terra` through the Responses API. An explicit `OPENAI_MODEL=gpt-6-luna` override is also supported for the user-requested lower-cost evaluation. Both planning and research use the selected model. Unknown and deprecated model overrides fail before a user turn is saved; there is no silent fallback. `CODEX_MODEL` is not read by this application.
 
 Verified against official OpenAI documentation on 2026-10-26: [model](https://developers.openai.com/api/docs/models/gpt-6.1-terra), [deprecations](https://developers.openai.com/api/docs/deprecations), [function calling](https://developers.openai.com/api/docs/guides/function-calling). Recheck these when deliberately changing models; do not silently accept untested overrides.
 
 Configuration:
 
 - Existing server-only `OPENAI_API_KEY` and Supabase server credentials.
-- `OPENAI_MODEL=gpt-6.1-terra` or omit for that default.
+- `OPENAI_MODEL=gpt-6.1-terra` or omit for that default. Explicit `gpt-6-luna` is accepted; the evaluation process can set it without editing private environment files.
 - `AGENT_WEB_SEARCH=true` by default. Explicit false disables it. Search adds provider cost and latency.
 - Existing Library cleanup secret and trusted scheduler.
 
@@ -217,4 +217,31 @@ All 266 offline tests passed after these changes. The follow-up research path ha
 
 October 28 follow-up acceptance: the same four-destination prompt completed in 97 seconds with 11 planner requests and one research request. Persisted state contained three days with 5, 6 and 5 scheduled arrangements, meals each day, catalog visits, a local transfer and two-night lodging coverage. The six-entry researched budget had zero unpriced costs and a computed EUR 239 to 491 per-person estimate, with explicit room-sharing assumptions and travel exclusions. One successful commit and one final reply were restored from isolated storage, with no failure event. The proposed single-base compromise and deferred destinations were stated before follow-up confirmation questions. This is one successful real-provider test on local code, not hosted deployment validation or a reliability-rate estimate.
 
-October 28, 2026: response presentation now belongs to [lib/chat-response](chat-response.md). It owns the single live-progress row, always before history and response content. Activity history retains permanent results with static icons and no competing live announcement. Transcript projection preserves reply identity through placeholder, streaming and retry, and handles live replies without metadata during saved-history reconciliation. See the response guide for regression protection and browser evidence.
+October 28, 2026: response presentation now belongs to [lib/chat-response](chat-response.md). It composes one trailing work disclosure through lib/work-progress. The header owns the only spinner; the default active preview shows the latest four steps. Completion collapses to the saved elapsed-time header, while explicit expansion keeps all history available. Activity history retains permanent results with static icons inside the expanded disclosure. Transcript projection preserves reply identity through placeholder, streaming and retry, and handles live replies without metadata during saved-history reconciliation. See the response guide for regression protection and browser evidence.
+
+
+## Provider rejection diagnostics
+
+A provider_limit failure can occur before any planner step. services/chat/provider.ts distinguishes structured temporary rate errors from credit, spend and usage limits, using specific error.code before a broad insufficient_quota type. Legacy ambiguous errors remain ambiguous. Persisted optional details keep restored UI instructions accurate without expanding the SQL failure-code allowlist. Safe server diagnostics contain allowlisted classifications only; raw prompts, error text and credentials are never logged. The model, 30-step allowance and 540-second deadline are unchanged.
+
+Official error-code and rate-limit guides were fetched October 28, 2026: [error codes](https://developers.openai.com/api/docs/guides/error-codes) and [rate limits](https://developers.openai.com/api/docs/guides/rate-limits). Tests synthesize provider responses through the installed SDK and database. The user's historical failure retained only provider_limit, zero steps and roughly 2.2 seconds, so its exact provider cause cannot be reconstructed from those logs.
+
+
+## Real meal selection
+
+October 29, 2026: shared guidance now requires catalog-first suitable meal venues, using the existing researchWeb or web_search for real restaurants when needed. researchWeb reports venue identity/address, meal service, closures, menu prices and booking guidance, distinguishing missing evidence. No dedicated restaurant API or model change was introduced. Plan tools reuse the extended shared location schema; observed URLs feed restaurant provenance validation through the existing research registration path. plan-quality owns selection and completeness, plan-editing owns representation, and budget-research coordinates selected meals with aggregate cost estimates. Generic new meal placeholders cannot pass Plan validation.
+
+
+## Reusable research and decisions
+
+October 29, 2026: common guidance now delegates supporting-file ownership and lifecycle to planning-documents. Research notes and Planning decisions use the existing document manifest and create/read/edit tools, with conditional creation, purpose-aware reuse after renames, relevant reads before affected changes, dated evidence and updates alongside dependent Plan/Budget changes. They do not duplicate the Travel brief, selected schedule or cost ledger. No provider or model change was made.
+
+
+## Position and journey tools
+
+October 29, 2026: When HEIGIT_API_KEY is configured, resolvePlace and getJourneys are available through the existing toolset. Automatic feasibility checks run independently of whether the model calls them. Reports omit route geometry. routes-and-stays owns hotel selection, positioning references, supported travel modes, corrective steps and honest incomplete status. No AI model or SDK provider change was made. See [Locations and routes](geo.md).
+
+
+### Luna evaluation compatibility
+
+Verified October29,2026 against the [official Luna model](https://developers.openai.com/api/docs/models/gpt-6-luna), [current model catalog](https://developers.openai.com/api/docs/models), [GPT-6 task guide](https://developers.openai.com/api/docs/guides/latest-model) and [deprecations](https://developers.openai.com/api/docs/deprecations). Exact ID: gpt-6-luna. Documented support includes Responses, streaming, function tools, structured output and web search. The existing low reasoning effort, store:false, sequential tool calls and streaming output are supported; no Chat Completions migration or sampling option changes are needed. Installed @ai-sdk/openai4.0.101 accepts the exact Responses ID and existing options. Configuration regression verifies explicit Luna, the unchanged Terra default and rejection of deprecated/unknown overrides before provider access or saving a user turn. Public compatibility does not establish account access or successful trip planning; live test outcomes are recorded separately in the evaluation report. The independent judge stays gpt-6-astra unless separately authorized and verified.

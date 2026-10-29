@@ -11,8 +11,8 @@ import { loadPlaceReferences, parsePlaceIds } from "@/lib/place-references";
 import { usePersistentChat } from "@/lib/chat";
 import { buildTranscript, ChatResponse, MessageText } from "@/lib/chat-response";
 
-export function TripChat({ reference, initialPrompt, starterFileIds = "", starterPlaceIds = "", selection, onSelectionHandled, messageTarget }: {
-  reference: string; initialPrompt?: string; starterFileIds?: string; starterPlaceIds?: string;
+export function TripChat({ reference, inactive = false, initialPrompt, starterFileIds = "", starterPlaceIds = "", selection, onSelectionHandled, messageTarget }: {
+  reference: string; inactive?: boolean; initialPrompt?: string; starterFileIds?: string; starterPlaceIds?: string;
   selection?: DocumentSelection | null; onSelectionHandled?: () => void;
   messageTarget?: { conversationId: string; messageId: string; requestId: string } | null;
 }) {
@@ -69,7 +69,7 @@ export function TripChat({ reference, initialPrompt, starterFileIds = "", starte
     document.getElementById(`chat-message-${messageTarget.messageId}`)?.scrollIntoView({ block: "center" });
   }, [messageTarget, locked, historyError, snapshot, chat]);
 
-  return <section className="workspace-chat" aria-label="Trip assistant">
+  return <section className="workspace-chat" aria-label="Trip assistant" inert={inactive} aria-hidden={inactive}>
     <header className="workspace-chat-header">
       <div className="workspace-chat-controls">
         {snapshot && snapshot.conversations.length > 1 && <><label className="sr-only" htmlFor="chat-history">Conversation history</label><select id="chat-history" className="cursor-pointer" aria-label="Conversation history" value={snapshot.conversationId} disabled={locked} onChange={event => { void chat.open(event.target.value); }}>{snapshot.conversations.map((conversation, index) => <option key={conversation.id} value={conversation.id}>Chat {snapshot.conversations.length - index}</option>)}</select></>}

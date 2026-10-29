@@ -4,7 +4,7 @@ Status: implemented with automated coverage. The Budget migration was applied on
 
 ## Responsibility
 
-Budget owns the trip's cost records and their evidence. It works through its own read/write API and manual UI without an AI agent or a saved Plan. Agent is a client of this module. Workspace places its surfaces beside Plan, Trip details and Library. The workspace reveals the Budget tab when a saved Budget exists, independently of Plan availability. A Budget arriving before Plan leaves chat visible and does not open the content panel. Library remains explicitly accessible at the regular width. BudgetPanel optionally reports saved availability and errors from its existing session through onAvailabilityChange; this adds no data requests.
+Budget owns the trip's cost records and their evidence. It works through its own read/write API and manual UI without an AI agent or a saved Plan. Agent is a client of this module. Workspace places its surfaces beside Plan and Library. The workspace reveals the Budget tab when a saved Budget exists, independently of Plan availability. A Budget arriving before Plan leaves chat visible and does not open the content panel. Library remains explicitly accessible at the regular width. BudgetPanel optionally reports saved availability and errors from its existing session through onAvailabilityChange; this adds no data requests.
 
 Plan owns arrangements. Budget references their stable IDs, but does not copy the itinerary. Library owns uploaded files and editable research documents. Guiding documents are application instructions, not user research. Budget owns its spending limit; do not maintain another copy in supporting context. Old free-text statements are historical evidence, not a second editable cost ledger.
 

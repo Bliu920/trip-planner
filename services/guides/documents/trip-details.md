@@ -53,6 +53,8 @@ Maintain one Library document of kind planning_context, initially named Travel b
 
 Within each section, record concise requirements with source message IDs or document IDs and content revisions where available. Label assumptions and unknowns alongside the field they affect. Sources refer to saved evidence; use readMessage or readDocument when the underlying detail is needed. Preserve unrelated existing context. Do not copy full conversations, research pages, trusted guide instructions, detailed schedules or calculated costs into this document. Do not record private reasoning.
 
+Keep the brief and brief chat summaries at the morning, afternoon or evening level for the shape of each day. The Plan owns proposed clock times, durations and end times for the detailed day view; keep saving that usable timetable rather than replacing it with period-only scheduling. Preserve exact user-provided arrival/departure times, bookings and deadlines wherever they are needed as requirements. Include a specific clock time in a chat summary when it is an important commitment or the user asks for it, rather than repeating the full timetable.
+
 ## Save and revisit
 
 At the beginning of first planning, read this guide and the supplied supportingContext, interpret the current input, then call saveBrief before catalog research or staging the plan/budget. Use the existing brief's metadata revision as expectedRevision, or 0 when it does not exist. The host chooses the single context document ID. This publishes the brief immediately and returns the updated workspace revision; it does not complete the planning request or save an itinerary.

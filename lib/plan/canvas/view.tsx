@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { inspectPlan, resolveLocation, type Plan, type Place } from "@/lib/plan";
+import { resolveLocation, type Plan, type Place } from "@/lib/plan";
 import { PlanPresentation, type Day } from "@/lib/plan/presentation";
 import { presentPlan, type Photo } from "@/lib/plan/presentation/model";
 import "@/lib/plan/presentation/presentation.css";
@@ -34,7 +34,6 @@ export function PlanCanvas({ plan, places, locked, onEdit, photos = {}, fallback
 
   // Project canonical Plan data.
   const data = presentPlan(plan, places, photos, fallbackPhotos);
-  const findings = inspectPlan(plan, places).findings;
 
 
   const editing = selection !== null;
@@ -121,10 +120,6 @@ export function PlanCanvas({ plan, places, locked, onEdit, photos = {}, fallback
       onEditDate={() => select({ kind: "date" })} onAdd={id => select({ kind: "add", id })} />
     {selection?.kind === "item" && <Dialog title={plan.items[selection.id]?.title ?? "Activity"} close={close} feedback={feedback}>{itemEditor(selection.id)}</Dialog>}
     {selection?.kind === "day" && <Dialog title={`Day ${plan.days.findIndex(day => day.id === selection.id) + 1}`} close={close} feedback={feedback}>{dayEditor(data.days.find(day => day.id === selection.id), plan.days.findIndex(day => day.id === selection.id) + 1)}</Dialog>}
-    {!!findings.length && <details className="pv2-checks">
-      <summary className="cursor-pointer">Planning checks ({findings.length})</summary>
-      {findings.map((finding, index) => <p key={index}>{finding.itemIds.map(id => plan.items[id]?.title).filter(Boolean).join(", ")}{finding.itemIds.length ? ": " : ""}{finding.message}</p>)}
-    </details>}
     {selection?.kind === "add" && <AddStop dayId={selection.id} places={places} locked={locked} save={save} close={close} feedback={feedback}/>}
     {selection?.kind === "date" && <Dialog title="When are you going?" close={close} feedback={feedback}>
       <form onSubmit={async event => {

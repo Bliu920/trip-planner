@@ -1107,3 +1107,42 @@ test("V2 SDK uses scoped reads, targeted edits and exact document edits before o
   assert.equal((await readTextDocument(reference, documentId)).markdown, "Clothes\nRain jacket\nDocuments\nPassport\n");
   assert.equal((await db.query("select * from planning_commits")).rows.length, 1);
 });
+
+test("restaurant research flows through the real SDK tool registry into saved meal evidence", async () => {
+  const { restaurantMeal } = await import("./restaurant-fixture");
+  process.env.AGENT_WEB_SEARCH = "true";
+  let calls = 0, researchCalls = 0;
+  let selected: ReturnType<typeof restaurantMeal>;
+  provider = async (_url, init) => {
+    const body = JSON.parse(String(init?.body));
+    if (body.stream !== true) {
+      researchCalls++;
+      return researchResponse("Fictional Cafe A, 1 Fictional Street, Rome. Fixture lunch menu EUR 20 to 30; service dates unverified. Comparable room EUR 80 per person-night. This is synthetic evidence.");
+    }
+    calls++;
+    if (calls === 1) return functionStream("researchWeb", { query: "Find a nearby lunch venue with name, address, meal service and menu prices, plus representative room costs." });
+    if (calls === 2) {
+      const reports = body.input.filter((part: { type: string }) => part.type === "function_call_output")
+        .map((part: { output: string }) => JSON.parse(part.output));
+      const report = reports.find((result: { data?: { checkedAt?: string } }) => result.data?.checkedAt)?.data;
+      assert.ok(report?.checkedAt); assert.match(report.summary, /1 Fictional Street/);
+      selected = restaurantMeal();
+      selected.location = { ...selected.location!, basis: { kind: "research", explanation: "Synthetic venue contact and menu facts.",
+        sources: [{ type: "web", url: report.sources[0].url, accessedAt: report.checkedAt }] } } as typeof selected.location;
+      const plan = examplePlan(); plan.items[selected.id] = selected; plan.days[0].itemIds.push(selected.id);
+      return functionStream("proposePlan", { plan, authorizedItemIds: [] });
+    }
+    if (calls === 3) return functionStream("proposeBudget", { budget: fixturePricedBudget(), reviewed: true });
+    if (calls === 4) return functionStream("commit", { summary: "Saved itinerary with a specific lunch venue", handledInputIds: [] });
+    assert.equal(body.tool_choice, "none"); return providerStream();
+  };
+  const response = await handleChat(new Request(`http://localhost/api/trips/${reference}/chat`, {
+    method: "POST", headers: { "Content-Type": "application/json", origin: "http://localhost" },
+    body: JSON.stringify({ conversationId: conversation, expectedLastId: null, retry: false, message: { id: "real-meal-user", text: "Plan Rome with real places to eat." } }),
+  }), reference);
+  const stream = await response.text();
+  assert.doesNotMatch(stream, /errorText/); assert.equal(calls, 5); assert.equal(researchCalls, 1);
+  assert.deepEqual((await getPlan(reference)).plan!.items["meal-a"], selected!);
+  assert.equal((await loadConversation(reference, conversation)).messages.at(-1)?.metadata?.status, "complete");
+  assert.equal((await db.query("select * from planning_commits")).rows.length, 1);
+});

@@ -7,7 +7,7 @@ import { catalogItem } from "@/lib/plan/commands";
 const original = previewPlan(false);
 const assumption: Basis = { kind: "assumption", sources: [], explanation: "Illustrative timing from the original Plan preview, not a confirmed reservation." };
 const catalogIds: Record<string, string> = {
-  market: "place_030", duomo: "place_093", ponte: "place_084",
+  lunch: "place_029", market: "place_030", duomo: "place_093", ponte: "place_084",
   uffizi: "place_026", buca: "place_033", oltrarno: "place_028",
   viewpoint: "place_027", boboli: "place_034",
 };
@@ -41,7 +41,7 @@ export function fixture(empty = false): Plan {
     };
     let item: PlanItem = { ...base, title: stop.title, reason: stop.note, optional: stop.optional ?? false, timing: schedule };
     if (stop.kind === "food") item = { ...item, kind: "meal" };
-    if (stop.id === "lunch") item.location = { type: "area", label: "Oltrarno", basis: assumption };
+    if (stop.id === "lunch") { item.title = `Lunch at ${place!.name}`; item.reason = "Illustrative meal choice; availability is unverified."; }
     if (stop.kind === "departure") item = {
       id: stop.id, kind: "travel", title: stop.title, reason: stop.note,
       optional: false, keep: null, reservation: null,

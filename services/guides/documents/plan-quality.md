@@ -16,13 +16,31 @@ For a normal full day, aim for a meaningful morning, afternoon and evening, with
 
 ## Make the day usable
 
-- Meals: include practical lunch and dinner arrangements for full days, and breakfast when relevant. Prefer suitable nearby restaurants or cafes from the dataset. If a specific venue is not selected, schedule an honest area-based meal with a reasonable duration. A food allowance in Budget or a sentence about dinner in another item's description is not a scheduled meal. Do not duplicate a meal explicitly included in a longer experience.
+- Meals: include practical lunch and dinner arrangements for full days, and breakfast when relevant. Select real, suitable nearby restaurants or cafes using the meal-selection rules below, with a suggested clock time and realistic duration. A food allowance in Budget or a sentence about dinner in another item's description is not a scheduled meal. Do not duplicate a meal explicitly included in a longer experience.
 - Movement within a city: account for meaningful journeys between the stay, activities and meals. Use travel items for journeys that consume noticeable time or determine feasibility, with mode, endpoints and a duration estimate. Short adjacent walks may be described with the associated stop, but their time still counts. Consider traffic, walking tolerance, waiting and practical buffers. Label unverified estimates; do not invent precise timetables.
 - Movement between cities: schedule the actual transfer day, including departure from the stay, station/airport access, waiting or boarding buffer, the main journey, onward travel and luggage/check-in logistics where relevant. Count door-to-door time rather than just the train or flight segment. Reduce sightseeing on that day to fit the remaining time. Do not add intercity travel when the chosen plan stays in one city.
-- Accommodation: cover every planned overnight with a stay and a useful base area or an existing user-provided hotel. Explain the base's relationship to the route. If no suitable hotel is supplied, mark the area as a proposed lodging choice, not a reservation or invented property. Keep the stay outside the daily sequence with night coverage; add separate check-in, check-out or luggage arrangements when they materially affect the day. A stay is not an all-day activity.
+- Accommodation: cover every planned overnight with a stay and a suitable researched hotel, an existing user-provided hotel, or an explicitly provisional base area. Explain the base's relationship to the route. Follow routes-and-stays to research a real property and check its relationship to the route. If no suitable property can be established, mark the area as a proposed lodging choice, not a reservation or invented property. Keep the stay outside the daily sequence with night coverage; add separate check-in, check-out or luggage arrangements when they materially affect the day. A stay is not an all-day activity.
 - Rest and flexibility: include purposeful breaks and free time where useful. A free afternoon requested by the user should remain free. Empty calendar space is not automatically a rest plan, and a title such as "gardens and free time" does not schedule the free time.
 
-Named new venues must come from the supplied Italy dataset. Research may enrich transport, opening hours and prices without replacing that source of places. Period-level scheduling and explicit assumptions are preferable to false precision.
+Named attractions come from the supplied Italy dataset. Externally researched restaurants may supplement meals when suitable options are missing; they do not replace the attraction dataset.
+
+## Select real places to eat
+
+Search the dataset first for restaurants, cafes or suitable food markets near the day's route. Read the full records and check suitability for the actual meal, budget and dietary needs. A cafe category does not establish breakfast service; an evening wine bar is not a breakfast option. Do not force an unsuitable venue just because it is listed.
+
+If suitable options are missing, use researchWeb or web_search to find a real nearby restaurant or cafe. Prefer its own website or menu. Establish the venue's name, street address and city; check menu or service hours, typical prices, relevant closures and booking guidance. Verify that the detour and service window fit the timetable. Record unknown or conflicting hours as a specific check, not confirmed availability. Batch related meal research by neighborhood when useful, and reuse a venue's evidence without repeating the same search.
+
+Save each selected meal as its own meal item. Put the actual venue name in its title, such as "Breakfast at Cafe A", and use its catalog ID or the sourced restaurant location described in plan-editing. Put useful menu, opening or reservation checks in concise item-linked notes. Use realistic meal durations and coordinate the selected meals with Budget; an aggregate food allowance does not replace restaurant selection.
+
+"Breakfast near the base", "Lunch around the square" and "Dinner in the city" are unfinished venue choices, not acceptable completed meal plans. Preserve an explicit user request to arrange their own meal, a meal included in a booked stay or excursion, or a meal genuinely outside the available travel day. Explain that exception and avoid duplicate meal items or costs. If research is unavailable or fails, use suitable dataset options; if none fit, disclose the unresolved meal rather than inventing a restaurant or presenting a placeholder as complete.
+
+## Give the day a usable timetable
+
+Give scheduled visits, meals, meaningful journeys, breaks and practical arrangements a suggested start time and a realistic duration or end time, using local time at the destination. The single-day view should read as a usable timeline. Morning, afternoon and evening can group the day; they do not replace clock times.
+
+Build around fixed commitments and known opening windows, then fit nearby activities, meals and door-to-door journeys around them. Use natural 15- or 30-minute increments for suggested starts. Allow for queues, traffic and breaks; when a duration is a range, leave room for its longer end before the next arrangement. Preserve the exact times of user-provided bookings.
+
+A proposed time is a planning choice, not a claim of confirmed availability. Missing arrival details or unverified hours still allow a practical suggested schedule with the relevant assumption or check recorded once in the day's notes. For transport without a verified departure, propose a travel window rather than a specific scheduled service. Keep timing open where the user explicitly wants flexibility or a known constraint prevents a useful placement.
 
 ## Choose destinations through feasibility
 
@@ -40,14 +58,17 @@ Respect explicit requests for one activity per day, free afternoons, rest-only d
 
 This is a middle day of an imaginary trip outside Italy, in City A, Country X. Every name, duration and time window below is a placeholder, not researched travel information. Copy the planning relationships, never these places, times or activity counts into an actual plan.
 
-| Part of day | Example arrangement | Why it is present |
+| Suggested local time | Example arrangement | Why it is present |
 | --- | --- | --- |
-| Morning | Breakfast near the proposed hotel area, then a 20 to 30 minute local journey | Connects the overnight base to the day and allows for movement |
-| Late morning | Museum A, the day's main activity, about two hours | Anchors the day around the traveller's interest |
-| Midday | Short walk and lunch at a nearby restaurant, about one hour for lunch | Uses the same neighborhood and gives eating its own time |
-| Early afternoon | Unhurried break, followed by a nearby garden or neighborhood visit | Adds useful supporting activity without another long journey |
-| Late afternoon | Return to the hotel area, allowing time for the journey and rest | Leaves recovery time instead of packing every hour |
-| Evening | Dinner near the stay, with an optional short walk afterward | Completes the day without an unnecessary cross-city trip |
+| 08:30 to 09:00 | Breakfast at fictional Cafe A near the stay | Starts from the overnight base |
+| 09:00 to 09:30 | Local journey to Museum A | Leaves another 15 minutes before the visit |
+| 09:45 to 11:45 | Museum A, the day's main activity | Anchors the day around the traveller's interest |
+| 12:00 to 13:00 | Lunch at fictional Restaurant B near Museum A | Allows a short walk and gives eating its own time |
+| 13:00 to 14:00 | Unhurried break | Keeps the pace comfortable |
+| 14:00 to 15:30 | Nearby garden or neighborhood visit | Adds supporting activity without a long journey |
+| 15:30 to 16:00 | Return to the hotel area | Accounts for the journey back |
+| 16:00 to 18:30 | Free time near the stay | Leaves a generous, visible rest window |
+| 19:00 to 20:00 | Dinner at fictional Restaurant C near the stay | Completes the day with room to reach the meal |
 | Overnight | The same proposed stay, linked to this night | Makes the next day's starting point understandable |
 
 On a transfer day to fictional City B, replace part of this pattern with check-out/luggage handling, travel to the station, a boarding buffer, the main journey and arrival logistics. Then choose nearby meals and an activity that fits the remaining time. Do not append a transfer to an already full sightseeing day.
@@ -58,9 +79,9 @@ Check the actual scheduled items and overnight coverage, not just titles, notes 
 
 - The plan uses the available time meaningfully and respects any requested empty periods.
 - The anchor has appropriate nearby supporting activities, unless its duration or an explicit constraint explains the exception.
-- Meals, meaningful journeys, overnight stays and necessary logistics are represented or explicitly included in another arrangement.
-- Activity durations, travel, meals and breaks fit together, with no unexplained backtracking or impossible connections.
+- Meals have actual suitable venues, supported by dataset records or retrieved restaurant evidence. Meaningful journeys, overnight stays and necessary logistics are represented or explicitly included in another arrangement.
+- Saved items have suggested local start times and durations or end times, with explicit flexible-time exceptions where appropriate. Activity durations, travel, meals and breaks fit together without overlaps, unexplained backtracking or impossible connections.
 - Opening hours, season, accessibility and bookings are checked where relevant; uncertainty and assumptions remain visible.
 - Plan arrangements and Budget coverage agree without counting bundled meals, admissions or transport twice.
 
-Repair missing arrangements before treating the first draft as complete. Explain genuine exceptions in concise traveller-facing notes. Do not inflate the plan with meaningless entries merely to satisfy this review.
+Repair missing arrangements before treating the first draft as complete. Explain genuine exceptions in concise traveller-facing notes linked to the affected arrangements. Keep research findings and route comparisons in the supporting documents under planning-documents; do not use Plan notes as a work diary. Do not inflate the plan with meaningless entries merely to satisfy this review.

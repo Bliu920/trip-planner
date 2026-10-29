@@ -66,6 +66,8 @@ October 28, 2026: plan-quality is automatically included in first-generation con
 
 The review examines actual scheduled items and overnight coverage, not labels or Budget alone. A daily anchor is a minimum organizing element, with supporting nearby activities, meals and travel where applicable. The fictional example is explicitly not evidence or a destination recommendation. No fixed event-count gate, schema change or new model is introduced. Existing typed Plan validation still checks structural validity; guide adherence and semantic completeness require live acceptance testing.
 
+October 29, 2026: plan-quality now makes a suggested local-clock timetable the normal output, with start times plus durations/end times, geographic order and practical buffers. Its fictional example illustrates an actual timed day. first-plan invokes that standard instead of preferring period-only scheduling; plan-editing maps it to the existing suggested/fixed time fields and alternative start+duration/start+end representations. Explicit flexibility stays available. No UI or schema change is needed: the single-day view already displays saved clock times. This changes generation guidance; existing period-only Plans acquire times when the agent is asked to revise them.
+
 
 October 28, 2026: trip-details and plan-editing explain that late saveBrief calls stage changes for final publication when other artifacts are pending. This is a supported transition, not a failed checkpoint. Initial brief checkpoints still persist before research; final save receipts remain the completion authority.
 
@@ -76,3 +78,20 @@ The same recovery follow-up routes price research through researchWeb, which ret
 ## V2 tool guidance
 
 Trusted guides now use createPlan/createBudget when absent, editPlan/editBudget for existing artifacts, createDocument/editDocument for Library text, and inspectChanges for review and final save verification. Changes require the current token from refreshed effective state; there are no mandatory redundant rereads. The initial workflow applies to itinerary requests, not unrelated document-only work. Partial edits preserve unrelated facts and costs, while coordinated changes still publish once through the existing commit.
+
+
+## Concrete meal choices
+
+October 29, 2026: plan-quality requires suitable dataset venues first, followed by sourced external restaurants when the dataset cannot fit the meal or route. The fictional example now names fictional cafes and restaurants instead of modeling generic meal placeholders. plan-editing documents the narrow restaurant location, actual retrieved source URLs, unchanged-evidence reuse and unknown coordinates. first-plan delegates meal selection to that standard, and budget-research keeps aggregate meal costs distinct from itinerary venue selection. New placeholders fail Plan validation; legacy unchanged meals warn without blocking unrelated edits. Restaurant research and source checks do not establish a reservation or confirmed opening on the visit date.
+
+
+## Supporting planning documents
+
+October 29, 2026: planning-documents is a discoverable reusable guide for independently maintained Research notes.md (research kind) and Planning decisions.md (working kind). Both are absent until useful reusable evidence or a material decision exists. Common guidance, first-plan, plan-editing and budget-research invoke the lifecycle. Existing manifest metadata and create/read/edit document tools provide discovery and progressive loading; no new storage kind, model or migration is required.
+
+Research records findings, direct source URLs, actual checked dates, applicability and outstanding external checks. Decisions record current choices, concise rationale, tradeoffs and useful alternatives. Travel brief remains authoritative for user requirements and questions; Plan and Budget remain authoritative for selected arrangements and money. Read the relevant existing file before affected edits, update that same file while preserving unrelated sections, retain dates on reused evidence and publish dependent changes together. Generated documents do not establish user confirmation or independent verification. Code still owns live validation; raw check reports and work diaries are not document outputs.
+
+
+## Routes and stays guide
+
+October 29, 2026: routes-and-stays is discoverable for researched hotel selection and map-supported timing changes. first-plan, plan-quality, plan-editing and common guidance point to it. It separates web identity/prices from positioning/routing, requires fixed-booking preservation and explains automatic checks, budgets, uncertainty, unsupported transport and corrective action.

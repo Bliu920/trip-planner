@@ -10,6 +10,41 @@ import { createDatabase, seed, databaseFetch, providerStream, reference, convers
 let db: PGlite;
 const originalFetch = globalThis.fetch;
 const originalEnv = Object.fromEntries(["OPENAI_API_KEY", "OPENAI_MODEL", "SUPABASE_URL", "SUPABASE_SECRET_KEY"].map(key => [key, process.env[key]]));
+
+test("planner model configuration accepts explicit Luna and rejects obsolete or unknown overrides", async () => {
+  const { agentModel, DEFAULT_MODEL } = await import("../services/agent");
+  delete process.env.OPENAI_MODEL;
+  assert.equal(agentModel(), DEFAULT_MODEL);
+  process.env.OPENAI_MODEL = "gpt-6-luna";
+  assert.equal(agentModel(), "gpt-6-luna");
+  for (const value of ["gpt-5-mini", "gpt-4o", "gpt-5.4-nano", "gpt-6.1-sol", "unknown-model"]) {
+    process.env.OPENAI_MODEL = value;
+    assert.throws(() => agentModel(), /Unsupported OPENAI_MODEL/);
+  }
+  process.env.OPENAI_MODEL = "gpt-5-mini";
+  const response = await handleChat(request(), reference);
+  assert.equal(response.status, 503);
+  assert.equal(calls, 0);
+  assert.equal((await loadConversation(reference, conversation)).messages.length, 0);
+});
+
+test("explicit Luna uses the existing Responses request and supported options", async () => {
+  process.env.OPENAI_MODEL = "gpt-6-luna";
+  provider = async (url, init) => {
+    assert.match(String(url), /\/responses$/);
+    const body = JSON.parse(String(init?.body));
+    assert.equal(body.model, "gpt-6-luna");
+    assert.equal(body.store, false);
+    assert.equal(body.reasoning.effort, "low");
+    assert.equal(body.parallel_tool_calls, false);
+    assert.ok(body.tools.some((tool: { name?: string }) => tool.name === "saveBrief"));
+    return providerStream();
+  };
+  const response = await handleChat(request(), reference);
+  assert.equal(response.status, 200);
+  await response.text();
+  assert.equal(calls, 1);
+});
 let calls = 0;
 let provider: typeof fetch;
 before(async () => { db = await createDatabase(); });
@@ -222,6 +257,10 @@ test("tool progress survives a mid-run reload, final reconciliation and a new at
   assert.match(await consumed, /data-activity/);
   const saved = await loadConversation(reference, conversation);
   const before = activityEntries(saved.messages[1].parts);
+  const { activityRun } = await import("../lib/activity/model");
+  const completedRun = activityRun(saved.messages[1].parts)!;
+  assert.equal(completedRun.status, "complete");
+  assert.ok(completedRun.elapsedMs! >= 0);
   assert.equal(before.length, 1);
   assert.equal(before[0].status, "complete");
   provider = async () => ++step === 3 ? functionStream("readPlaces", { ids: ["place_002"] }) : providerStream();
@@ -231,4 +270,33 @@ test("tool progress survives a mid-run reload, final reconciliation and a new at
   assert.equal(after.length, 2);
   assert.deepEqual(after[0], before[0]);
   assert.notEqual(after[0].attempt, after[1].attempt);
+  const retriedRun = activityRun((await loadConversation(reference, conversation)).messages[1].parts)!;
+  assert.notEqual(retriedRun.attempt, completedRun.attempt);
+  assert.ok(retriedRun.elapsedMs! >= 0);
+});
+
+for (const [code, reason, copy] of [
+  ["credit_balance_exhausted", "credits_exhausted", /add credits/],
+  ["project_spend_limit_exceeded", "spend_limit", /billing limits/],
+  ["insufficient_quota", "quota", /credits and limits/],
+  ["rate_limit_exceeded", "rate_limit", /at least 9 seconds/],
+] as const) test(`SDK ${code} is classified, persisted and restored without leaking provider text`, async () => {
+  const warnings: string[] = [], originalWarn = console.warn;
+  console.warn = (...args: unknown[]) => { warnings.push(args.map(String).join(" ")); };
+  try {
+    provider = async () => Response.json({ error: { code, type: reason === "rate_limit" ? "rate_limit_error" : "insufficient_quota", message: "private provider diagnostic with secret values" } }, { status: 429, headers: { "Retry-After": "9" } });
+    const response = await handleChat(request(), reference), stream = await response.text();
+    assert.match(stream, copy); assert.doesNotMatch(stream, /private provider diagnostic|secret values|test-key/);
+    const saved = await loadConversation(reference, conversation), reply = saved.messages.at(-1)!;
+    const failure = reply.parts.find(part => part.type === "data-failure");
+    assert.equal(failure?.type, "data-failure");
+    if (failure?.type !== "data-failure") throw new Error("Expected persisted diagnostic");
+    assert.equal(failure.data.code, "provider_limit"); assert.equal(failure.data.providerReason, reason);
+    assert.equal(failure.data.steps, 0); assert.equal(calls, 1, "No automatic retries for billing or rate errors.");
+    assert.equal(failure.data.retryAfterSeconds, reason === "rate_limit" ? 9 : undefined);
+    const { replyFailureMessage } = await import("../lib/chat/failure");
+    assert.match(replyFailureMessage(reply), copy);
+    assert.match(warnings.join("\n"), /chat_provider_error/); assert.match(warnings.join("\n"), new RegExp(code));
+    assert.doesNotMatch(warnings.join("\n"), /private provider diagnostic|secret values|test-key/);
+  } finally { console.warn = originalWarn; }
 });

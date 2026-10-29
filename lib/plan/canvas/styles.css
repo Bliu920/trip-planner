@@ -48,8 +48,6 @@
 .pv2-title-form label { margin:0; font-size:12px; }
 .pv2-add { display:flex; align-items:center; gap:6px; padding:9px 17px; margin:0 0 7px; border:0; background:none; color:#65745f; font-size:12px; text-align:left; }
 .pv2-add:hover:not(:disabled) { color:#175b43; text-decoration:underline; text-underline-offset:3px; }
-.pv2-checks { margin:0 16px; padding:12px 0; color:#6b7a70; font-size:13px; }
-.pv2-checks p { margin-top:10px; }
 @container plan-presentation (max-width:440px) { .pv2-field-row { grid-template-columns:1fr; gap:0; } .pv2-itemEditor { margin-left:4px; } }
 @media (pointer:coarse) { .pv2-text-action,.pv2-more-actions summary,.pv2-add { min-height:44px; } }
 

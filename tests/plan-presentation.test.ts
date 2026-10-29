@@ -98,7 +98,7 @@ test("day details resolve real coordinates and preserve recorded evidence withou
   assert.deepEqual(stop.coordinates, [catalog[0].latitude, catalog[0].longitude]);
   assert.equal(stop.photo, photo);
   assert.equal(stop.endTime, "12:30");
-  assert.ok(stop.details?.some(detail => detail.value === "Arrive early for entry"));
+  assert.ok(stop.reminders?.some(reminder => reminder.text === "Arrive early for entry"));
   assert.ok(stop.details?.some(detail => detail.label === "Timing"));
   assert.equal(stop.sources?.[0].url, "https://example.com/entry");
   assert.equal(stop.priceLabel, undefined);
@@ -121,4 +121,40 @@ test("area locations never become map pins and referenced locations follow their
   assert.deepEqual(presentPlan(plan, catalog).days[1].stops[0].coordinates, [0, 0]);
   item.location.latitude = 91;
   assert.equal(presentPlan(plan, catalog).days[1].stops[0].coordinates, null);
+});
+
+
+test("lodging and necessary reminders project to their days without exposing background assumptions", () => {
+  const plan = examplePlan();
+  plan.items.stay = { id: "stay", kind: "stay", title: "Proposed central base", reason: null,
+    optional: false, keep: null, reservation: null, location: { type: "area", label: "City center", basis: assumption },
+    coverage: { type: "nights", afterDayIds: ["day-1", "day-2"], basis: assumption } };
+  plan.notes = [
+    { id: "research", kind: "assumption", text: "Background comparison", relatedItemIds: [], sources: [] },
+    { id: "entry", kind: "action", text: "Reserve entry", relatedItemIds: ["visit-1"], sources: [{ type: "web", url: "https://example.com/tickets", accessedAt: "2026-10-29T00:00:00.000Z" }] },
+    { id: "stay-check", kind: "uncertainty", text: "Confirm check-in time", relatedItemIds: ["stay"], sources: [] },
+    { id: "trip-check", kind: "action", text: "Confirm arrival time", relatedItemIds: [], sources: [] },
+  ];
+  const before = structuredClone(plan), result = presentPlan(plan, catalog);
+  assert.deepEqual(plan, before);
+  assert.deepEqual(result.days.map(day => day.stays?.map(stay => stay.id)), [["stay"], ["stay"], []]);
+  assert.deepEqual(result.days.map(day => day.reminders?.map(note => note.id)), [["entry", "stay-check"], ["stay-check"], []]);
+  assert.deepEqual(result.reminders?.map(note => note.id), ["trip-check"]);
+  assert.equal(result.days[0].stops[0].reminders?.[0].sources?.[0].url, "https://example.com/tickets");
+  assert.ok(result.days[0].stays?.[0].details?.some(detail => detail.label === "Nights" && /Day 2/.test(detail.value)));
+  assert.deepEqual(result.pendingItems, []);
+});
+
+test("unassigned bookings and stays remain actionable while ordinary candidate items stay off the itinerary", () => {
+  const plan = examplePlan(); plan.days[0].itemIds = [];
+  plan.items.stay = { id: "stay", kind: "stay", title: "Stay awaiting nights", reason: null,
+    optional: false, keep: null, reservation: null, location: { type: "area", label: "City center", basis: assumption }, coverage: null };
+  let result = presentPlan(plan, catalog);
+  assert.deepEqual(result.pendingItems?.map(item => item.id), ["stay"]);
+  const visit = plan.items["visit-1"]; visit.reservation = { state: "booked", basis: assumption };
+  result = presentPlan(plan, catalog);
+  assert.deepEqual(result.pendingItems?.map(item => item.id), ["visit-1", "stay"]);
+  assert.equal(findStop(result, "visit-1")?.bookingLabel, "Reservation: booked");
+  plan.days[1].itemIds = ["visit-1"];
+  assert.deepEqual(presentPlan(plan, catalog).pendingItems?.map(item => item.id), ["stay"]);
 });

@@ -20,7 +20,7 @@ Honor an explicit instruction to stop, pause, ask questions first or discuss opt
 
 Follow trip-details for the fields to collect, missing-information defaults, evidence distinctions and Travel brief structure. Read the supplied workspace, current input and relevant attachments. Save or update the brief using saveBrief before researching places or staging other artifacts. This checkpoint preserves the requirements if later planning fails; it is not a completed plan.
 
-Read plan-editing and budget-research before proposing those artifacts. Use the brief throughout the workflow to check decisions, revisiting earlier steps when evidence changes feasibility.
+Read plan-editing and budget-research before proposing those artifacts. Apply planning-documents when preserving reusable research or material route decisions; discover and read relevant existing supporting files before relying on them. Use the brief throughout the workflow to check decisions, revisiting earlier steps when evidence changes feasibility.
 
 ## Step 2: Explore cities and core activities
 
@@ -32,9 +32,9 @@ Read full candidate records with readPlaces. Select user must-go places first, t
 
 Apply plan-quality to every available day, including relaxed trips. Select a main activity as an anchor, then build nearby complementary activities, meals and practical movement around it. One activity per day is a minimum source-coverage rule, not the definition of a finished day.
 
-Arrange core activities geographically and around fixed commitments. Establish overnight bases and account for door-to-door intercity transfers before assigning sightseeing time. Do not make arrival/departure days sparse solely because the user has not supplied times. Add useful meals, breaks, transfers and supporting activities based on location, pace, interests and likely spending. Leave slack for travel and rest; do not fill every hour. Include alternatives only when useful and keep them separate from the selected schedule and budget.
+Arrange core activities geographically and around fixed commitments. Read routes-and-stays for researched hotels and map-based travel checks. Establish overnight bases and account for door-to-door intercity transfers before assigning sightseeing time. Do not make arrival/departure days sparse solely because the user has not supplied times. Add useful meals, breaks, transfers and supporting activities based on location, pace, interests and likely spending. Leave slack for travel and rest; do not fill every hour. Include alternatives only when useful and keep them separate from the selected schedule and budget.
 
-Use period-level scheduling when precise times are unjustified. When catalog duration_minutes is known, populate duration with that value and a catalog basis. For generic meals, breaks and transfers, give reasonable duration ranges labeled as assumptions or explain why duration is unknown. Check each day's total time, seasonal hours, arrival/departure constraints and travel practicality. External research supplements the catalog; named new venues must still use catalog IDs.
+Build a suggested local-time timetable under plan-quality, with clock starts and realistic durations or end times for the day's activities, meals and movement. Follow plan-editing's timing representation so these times appear in the saved itinerary. Use known catalog durations with their source and reasonable ranges for selected meals, breaks and transfers. Check the sequence against seasonal hours, arrival/departure constraints and travel time, including buffers. Keep named attractions catalog-backed. Select specific meal venues under plan-quality: suitable dataset choices first, then web-researched restaurants when needed, saving their names, addresses and sources under plan-editing.
 
 ## Step 4: Validate and research the budget
 
@@ -46,7 +46,7 @@ Immediately record useful price facts and evidence in createBudget/editBudget ag
 
 ## Step 5: Review, save and confirm
 
-Run plan-quality's review on the actual scheduled items and overnight stays. Repair missing daily arrangements, then check the itinerary and budget against the brief, including source uncertainty, schedule feasibility, fixed bookings, coverage and double counting. Stage any final brief corrections with editDocument, including replacing provisional numeric budget requirements with references to the saved Budget representation. Keep substantive unresolved questions visible.
+Run plan-quality's review on the actual scheduled items and overnight stays. Repair missing daily arrangements, then check the itinerary and budget against the brief, including source uncertainty, schedule feasibility, fixed bookings, coverage and double counting. Stage any final brief corrections with editDocument, including replacing provisional numeric budget requirements with references to the saved Budget representation. Keep substantive unresolved questions visible. Under planning-documents, create or update useful Research notes and Planning decisions with the affected changes. Link necessary traveller-facing reminders to actual Plan items; keep background research and comparisons in Library.
 
 Correct remaining validation errors and pending checks. Leave enough steps for targeted research, a corrected proposal and commit within the bounded run. Commit the plan, budget and final document edits together, once. A rejected proposal or saved:false result is not saved. Only report successful planning after a commit receipt.
 

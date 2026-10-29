@@ -1,4 +1,7 @@
 import "server-only";
+import { checkJourneys, inspectGeoSources, journeySummary } from "@/services/feasibility";
+import { geoConfigured, resolvePlace } from "@/services/geo";
+import type { JourneyReport } from "@/lib/journeys";
 import { budgetSchema, inspectBudget, type Budget } from "@/lib/budget";
 import { BudgetReview } from "@/services/budgets";
 import { randomUUID } from "node:crypto";
@@ -14,7 +17,7 @@ import {
   type TextDocument,
 } from "@/lib/documents/text";
 import type { DocumentSummary } from "@/lib/documents/types";
-import { places } from "@/services/plans";
+import { places, inspectVenueSources } from "@/services/plans";
 import { loadCatalog, readPlaces } from "@/services/catalog";
 import { describeCatalog, queryCatalog } from "@/lib/catalog";
 import { validateDocumentEdit, prepareDocument, readTextDocument } from "@/services/documents";
@@ -58,6 +61,7 @@ export async function openSession(
     ? await readTextDocument(reference, snapshot.contextDocumentId)
     : null;
   let proposed: Plan | null = null;
+  let journeys: JourneyReport | null = null;
   let planRequired = false;
   let budgetRequired = false;
   const documentRequirements = new Set<string>();
@@ -165,9 +169,18 @@ export async function openSession(
         budget: JSON.stringify(budget ?? null).length <= 16000 ? budget : undefined,
         supportingContext: currentBrief ? { ...context, ...currentBrief, draft: true, proposedContentRevision: (context?.contentRevision ?? 0) + 1 } : context,
         documents: artifactState?.documents ?? snapshot.documents,
-        artifactState };
+        journeys: journeys ? journeySummary(journeys) : null, artifactState };
     },
     initialGeneration,
+    ...(geoConfigured() ? {
+      resolvePlace: (query: import("@/lib/journeys").PositionQuery) => resolvePlace(reference, query, signal),
+      getJourneys: async () => {
+        const plan = proposed ?? snapshot.plan;
+        if (!plan) return { status: "unverified", message: "Propose an itinerary first; its required journeys will be checked automatically." };
+        journeys = await checkJourneys(reference, plan, places, signal);
+        return journeySummary(journeys);
+      },
+    } : {}),
     recordWebSources(urls) { for (const url of urls) retrievedUrls.add(url); },
     recordWebResearch() { budgetReview.recordResearch(); },
     async proposeBudget(budget, reviewed) {
@@ -228,6 +241,7 @@ export async function openSession(
       );
       const effectiveCheck = proposed ? inspectPlan(plan, places, proposed, authorizedItemIds) : null;
       if (effectiveCheck) checked.findings.push(...effectiveCheck.findings.filter(f => f.severity === "error"));
+      if (checked.plan) checked.findings.push(...inspectVenueSources(checked.plan, snapshot.plan, retrievedUrls));
       const sources = sourcesIn(plan).filter(
         (s) => s.type !== "document" || !edits.has(s.documentId),
       );
@@ -235,10 +249,18 @@ export async function openSession(
         p_trip: reference,
         p_sources: sources,
       });
+      let routeReport: JourneyReport | null = null;
+      if (checked.plan && !checked.findings.some(finding => finding.severity === "error")) {
+        checked.findings.push(...await inspectGeoSources(reference, checked.plan, signal));
+        if (!checked.findings.some(finding => finding.severity === "error")) {
+          routeReport = await checkJourneys(reference, checked.plan, places, signal);
+          checked.findings.push(...routeReport.findings);
+        }
+      }
       const valid =
         !!checked.plan && !checked.findings.some((f) => f.severity === "error");
-      if (valid) { rejected.delete("plan"); proposed = checked.plan; authorized = [...new Set([...authorized, ...authorizedItemIds])]; }
-      return { findings: checked.findings, valid };
+      if (valid) { journeys = routeReport; rejected.delete("plan"); proposed = checked.plan; authorized = [...new Set([...authorized, ...authorizedItemIds])]; }
+      return { findings: checked.findings, valid, journeys: routeReport ? journeySummary(routeReport) : null };
     },
     async reload() {
       active();
@@ -252,6 +274,7 @@ export async function openSession(
       context = latestContext;
       contextId = snapshot.contextDocumentId ?? contextId;
       proposed = null;
+      journeys = null;
       saveBrief.reset();
       proposedBudget = null;
       budgetReviewed = false;
@@ -298,6 +321,14 @@ export async function openSession(
         );
       if (proposed && (!snapshot.plan || Object.keys(snapshot.plan.items).length === 0) && !proposedBudget?.entries.length)
         throw new WorkspaceError("The first itinerary needs a budget. Research costs and proposeBudget, or record unknown costs with reasons when prices cannot be obtained.", 400);
+      if (proposed && inspectVenueSources(proposed, snapshot.plan, retrievedUrls).length)
+        throw new WorkspaceError("Venue sources need checking before saving.", 400, "PLAN_SOURCE");
+      if (proposed) {
+        const sourceFindings = await inspectGeoSources(reference, proposed, signal);
+        journeys = await checkJourneys(reference, proposed, places, signal);
+        if ([...sourceFindings, ...journeys.findings].some(finding => finding.severity === "error"))
+          throw new WorkspaceError("Resolve the reported journey or map-source conflicts before saving.", 400, "PLAN_INVALID", { findings: [...sourceFindings, ...journeys.findings], journeys: journeySummary(journeys) });
+      }
       if (proposedBudget) validateBudget(proposedBudget, true);
       // Resolve price gaps first.
       const checks = proposedBudget ? budgetCheck() : null;
@@ -334,7 +365,7 @@ export async function openSession(
       });
       receipt = result.receipt;
       acceptSaved(result.snapshot);
-      return { saved: true, ...result, ...(checks ? { budgetCheck: checks } : {}) };
+      return { saved: true, ...result, journeys: journeys ? journeySummary(journeys) : null, ...(checks ? { budgetCheck: checks } : {}) };
     },
     async withdraw(operationId) {
       active();

@@ -6,11 +6,11 @@ export type PlanView = PlanSnapshot & { places: Place[]; fallbackPhotos?: Photo[
 const url = (reference: string) =>
   `/api/trips/${encodeURIComponent(reference)}/plan`;
 export class PlanRequestError extends Error {
-  constructor(message: string, readonly status: number) { super(message); this.name = "PlanRequestError"; }
+  constructor(message: string, readonly status: number, readonly code?: string) { super(message); this.name = "PlanRequestError"; }
 }
 async function json<T>(response: Response): Promise<T> {
   const body = await response.json();
-  if (!response.ok) throw new PlanRequestError(body.error || "Could not update the plan.", response.status);
+  if (!response.ok) throw new PlanRequestError(body.error || "Could not update the plan.", response.status, body.code);
   return body;
 }
 export function loadPlan(reference: string, signal?: AbortSignal) {
@@ -31,6 +31,6 @@ export function updatePlan(
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ revision, plan, requestId }),
-    signal: AbortSignal.timeout(30000),
+    signal: AbortSignal.timeout(60000),
   }).then(json<{ savedRevision: number; snapshot: PlanSnapshot }>);
 }

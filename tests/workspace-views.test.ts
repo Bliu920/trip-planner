@@ -5,7 +5,7 @@ import type { PGlite } from "@electric-sql/pglite";
 import { createDatabase, seed, databaseFetch, reference, conversation, generation } from "./chat-fixture";
 import { examplePlan, fixturePricedBudget } from "./plan-fixture";
 import { openSession } from "../services/workspace";
-import { beginTurn } from "../services/conversations";
+import { beginTurn, saveReply } from "../services/conversations";
 import { getPlan, savePlan } from "../services/plans";
 import { agentTools } from "../services/agent/tools";
 import type { ArtifactEnvironment } from "../services/agent/contracts";
@@ -153,4 +153,95 @@ test("failed reload keeps the accepted draft; successful reload requires discard
   await api.createDocument(token(api), "Notes.txt", "working", "Restaged draft");
   const inspected = await api.inspectChanges() as { blockers: { artifact: string }[] };
   assert.equal(inspected.blockers.some(blocker => blocker.artifact.startsWith("documents")), false);
+});
+
+test("researched restaurants require observed sources and persist through scoped and direct edits", async () => {
+  const { restaurantMeal, restaurantLocation, restaurantUrl } = await import("./restaurant-fixture");
+  const { api, environment } = await session(); await initial(api, environment);
+  const before = structuredClone(plan(api));
+  const operations = [
+    { type: "addItem" as const, item: restaurantMeal(), dayId: "day-1", index: null },
+  ];
+  const failed = await api.editPlan(token(api), operations, []) as { valid: boolean; findings: { code: string }[] };
+  assert.equal(failed.valid, false);
+  assert.ok(failed.findings.some(f => f.code === "restaurant_source"));
+  assert.deepEqual(plan(api), before);
+  await assert.rejects(api.commit(token(api), "Cannot skip source checks", ["v2-user"]), /rejected changes/);
+  environment.recordWebSources!([restaurantUrl]);
+  const accepted = await api.editPlan(token(api), operations, []) as { valid: boolean };
+  assert.equal(accepted.valid, true);
+  await api.editBudget(token(api), [{ type: "recordReview" }]);
+  assert.equal((await api.commit(token(api), "Saved real meal", ["v2-user"]) as { saved: boolean }).saved, true);
+  const saved = await getPlan(reference);
+  assert.deepEqual((saved.plan!.items["meal-a"] as ReturnType<typeof restaurantMeal>).location, restaurantLocation());
+  const direct = structuredClone(saved.plan!); direct.days[1].title = "Changed offline";
+  const updated = await savePlan(reference, saved.revision, direct, randomUUID());
+  assert.equal(updated.snapshot.plan!.days[1].title, "Changed offline");
+  assert.deepEqual((updated.snapshot.plan!.items["meal-a"] as ReturnType<typeof restaurantMeal>).location, restaurantLocation());
+  const injected = structuredClone(updated.snapshot.plan!);
+  (injected.items["meal-a"] as ReturnType<typeof restaurantMeal>).location = { ...restaurantLocation(), address: "2 Other Street" };
+  await assert.rejects(savePlan(reference, updated.snapshot.revision, injected, randomUUID()), /Look up this restaurant source/);
+  assert.deepEqual((await getPlan(reference)).plan, updated.snapshot.plan);
+});
+
+test("generic meals are rejected by agent and direct saves without erasing an accepted draft", async () => {
+  const { restaurantMeal } = await import("./restaurant-fixture");
+  const { assumption } = await import("./plan-fixture");
+  const { api, environment } = await session(); await initial(api, environment);
+  const item = restaurantMeal(); item.title = "Breakfast near the base";
+  item.location = { type: "area", label: "Near the base", basis: assumption };
+  const rejected = await api.editPlan(token(api), [{ type: "addItem", item, dayId: null, index: null }], []) as { valid: boolean; findings: { code: string }[] };
+  assert.equal(rejected.valid, false); assert.ok(rejected.findings.some(f => f.code === "meal_venue"));
+  assert.equal(plan(api).items[item.id], undefined);
+  await assert.rejects(api.commit(token(api), "Cannot skip meal correction", ["v2-user"]), /rejected changes/);
+  const direct = examplePlan(); direct.items[item.id] = item;
+  await assert.rejects(savePlan(reference, 0, direct, randomUUID()), /Choose a specific restaurant/);
+  assert.equal((await getPlan(reference)).plan, null);
+});
+
+test("a saved user-sourced note cannot block a scoped timetable edit after JSONB reload", async () => {
+  const { assumption } = await import("./plan-fixture");
+  const original = examplePlan();
+  original.notes.push({ id: "user-note", kind: "uncertainty", text: "Confirm arrival time", relatedItemIds: [], sources: [{ type: "legacy_notes" }] });
+  await savePlan(reference, 0, original, randomUUID());
+  const { api } = await session();
+  const visit = plan(api).items["visit-1"];
+  if (visit.kind !== "visit") throw new Error("Expected visit fixture");
+  const timing = { ...visit.timing, start: { date: null, time: "09:45", binding: "suggested" as const, basis: assumption } };
+  const changed = await api.editPlan(token(api), [{ type: "updateItem", id: visit.id, fields: { timing } }], []) as { valid: boolean };
+  assert.equal(changed.valid, true);
+  const result = await api.commit(token(api), "Saved suggested timetable", ["v2-user"]) as { saved: boolean };
+  assert.equal(result.saved, true);
+  const after = (await getPlan(reference)).plan!;
+  assert.deepEqual(after.notes, original.notes);
+  assert.equal((after.items[visit.id] as typeof visit).timing.start?.time, "09:45");
+});
+
+
+test("supporting evidence and decisions are independently discoverable and update existing files on later turns", async () => {
+  const { api, environment, turn } = await session();
+  const research = await api.createDocument(token(api), "Research notes.md", "research", "# Evidence\nService hours: unconfirmed.\nChecked 2026-10-28.\n\n# Other evidence\nKeep this finding.\n") as { id: string };
+  const decisions = await api.createDocument(token(api), "Planning decisions.md", "working", "# Route\nUse a single base to reduce travel.\n") as { id: string };
+  const manifest = api.manifest() as { documents: { id: string; name: string; kind: string }[] };
+  assert.equal(manifest.documents.find(doc => doc.id === research.id)?.kind, "research");
+  assert.equal(manifest.documents.find(doc => doc.id === decisions.id)?.kind, "working");
+  assert.ok(JSON.stringify(environment.context).includes("Research notes.md"));
+  await api.commit(token(api), "Saved useful supporting records", ["v2-user"]);
+  assert.equal((await getPlan(reference)).plan, null, "Document-only work does not create an itinerary");
+  await saveReply(reference, conversation, turn.responseId, generation, "Saved supporting notes.", "complete");
+  const nextGeneration = randomUUID();
+  const nextTurn = await beginTurn(reference, { conversationId: conversation, expectedLastId: turn.responseId, retry: false, message: { id: "update-research", text: "Refresh the relevant service hours." } }, nextGeneration);
+  const next = await openSession(reference, conversation, nextTurn.responseId, nextGeneration, new AbortController().signal);
+  const followup = next.artifacts!;
+  const savedResearch = await followup.readDocument({ id: research.id, view: "effective", contentRevision: null }) as { content: string };
+  const savedDecision = await followup.readDocument({ id: decisions.id, view: "effective", contentRevision: null }) as { content: string };
+  assert.match(savedResearch.content, /Service hours: unconfirmed/); assert.match(savedDecision.content, /single base/);
+  await followup.editDocument(token(followup), research.id, [{ type: "replaceText", oldText: "Service hours: unconfirmed.\nChecked 2026-10-28.", newText: "Service hours: checked against the new fixture source.\nChecked 2026-10-29." }]);
+  await followup.commit(token(followup), "Updated the relevant research", ["update-research"]);
+  const documents = (followup.manifest() as { documents: { id: string }[] }).documents;
+  assert.deepEqual(documents.map(doc => doc.id).sort(), [research.id, decisions.id].sort());
+  const latest = await followup.readDocument({ id: research.id, view: "saved", contentRevision: null }) as { content: string };
+  assert.match(latest.content, /2026-10-29/); assert.match(latest.content, /Keep this finding/);
+  assert.equal((await followup.readDocument({ id: decisions.id, view: "saved", contentRevision: null }) as { content: string }).content, savedDecision.content);
+  assert.match((await followup.readDocument({ id: research.id, view: "saved", contentRevision: 1 }) as { content: string }).content, /2026-10-28/);
 });

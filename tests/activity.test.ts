@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import type { PGlite } from "@electric-sql/pglite";
 import { ActivityRecorder } from "../services/activity";
 import { completed, source } from "../services/activity/summary";
-import { activityEntries, type ActivityEntry } from "../lib/activity/model";
+import { activityEntries, activityRun, type ActivityEntry } from "../lib/activity/model";
 import { createDatabase, seed, reference, otherTrip, conversation, generation } from "./chat-fixture";
 import type { ChatSnapshot } from "../lib/chat/types";
 
@@ -97,6 +97,28 @@ test("recorder saves before publishing and retains safe results instead of raw i
   assert.deepEqual(reloaded, [emitted.at(-1)]);
   const failed = new ActivityRecorder(generation, async () => { throw new Error("offline"); }, () => assert.fail("Unsaved activity must not be published"));
   await assert.rejects(failed.consume({ type: "tool-input-start", toolCallId: "file", toolName: "stageDocument" }), /offline/);
+});
+
+test("run duration is persisted, reloadable and separate from steps", async t => {
+  const message = await begin();
+  let now = Date.now();
+  t.mock.method(Date, "now", () => now);
+  const emitted: ActivityEntry[] = [];
+  const recorder = new ActivityRecorder(generation, async item => { assert.equal(await save(message, item), true); }, item => emitted.push(item));
+  await recorder.start();
+  await recorder.start();
+  assert.equal(emitted.length, 1);
+  const active = (await snapshot()).messages[1];
+  assert.equal(activityRun(active.parts)?.status, "running");
+  assert.equal(activityEntries(active.parts).length, 0);
+  now += 24000;
+  await recorder.finish("complete");
+  now += 10000;
+  await recorder.finish("complete");
+  const stored = activityRun((await snapshot()).messages[1].parts)!;
+  assert.equal(stored.elapsedMs, 24000);
+  assert.equal(stored.status, "complete");
+  assert.equal(emitted.length, 2);
 });
 
 test("sources reject unsafe links and prepared files never claim saving", () => {

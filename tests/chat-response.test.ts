@@ -55,11 +55,12 @@ test("prior retry attempts cannot supply the current running label", () => {
   assert.equal(items.at(-1)?.progress, "Working on your trip...");
 });
 
-test("real rendered responses enforce first-position single-spinner layout", () => {
+test("real rendered responses enforce trailing single-spinner layout", () => {
   // Client rendering needs the normal React condition, not react-server.
   const output = execFileSync(process.execPath, ["--import", "tsx", "tests/chat-response-render.tsx"], { encoding: "utf8", timeout: 30000 });
   assert.match(output, /Rendered 12 response scenarios successfully/);
   assert.match(output, /Rendered Markdown, safety, literal-user and streaming checks successfully/);
+  assert.match(output, /Rendered work preview and persisted completion checks successfully/);
 });
 
 test("workspace delegates response rendering instead of adding a competing indicator", () => {
@@ -69,4 +70,7 @@ test("workspace delegates response rendering instead of adding a competing indic
   assert.doesNotMatch(workspace, /LoaderCircle|animate-spin|data-chat-activity|<ActivityHistory|Working on your trip/);
   const history = readFileSync("lib/activity/history.tsx", "utf8");
   assert.doesNotMatch(history, /LoaderCircle|animate-spin|aria-live|role="status"/);
+  const response = readFileSync("lib/chat-response/view.tsx", "utf8");
+  assert.match(response, /<WorkProgress key="response-progress"/);
+  assert.doesNotMatch(response, /LoaderCircle|animate-spin|data-chat-activity|<ActivityHistory/);
 });

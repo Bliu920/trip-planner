@@ -2,6 +2,7 @@ import { actionResultSchema } from "@/lib/actions";
 import type { ActivityEntry } from "@/lib/activity/model";
 
 const titles: Record<string, string> = {
+  resolvePlace: "Check a place address", getJourneys: "Check travel between places",
   readEnvironment: "Review your trip", readPlan: "Read your itinerary", readBudget: "Read your budget", listDocuments: "Find your documents",
   createPlan: "Prepare your itinerary", editPlan: "Update your itinerary", createBudget: "Prepare your budget", editBudget: "Update your budget",
   createDocument: "Prepare a file", editDocument: "Update your document", inspectChanges: "Review your changes", researchWeb: "Research your trip",

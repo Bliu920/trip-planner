@@ -1,14 +1,12 @@
 import type { Metadata } from "next";
-import { cacheLife } from "next/cache";
-import { PhotoCredits } from "@/lib/photo-credits";
-import { loadCatalog, loadDayCoverPhotos } from "@/services/catalog";
+import { ProductStory } from "@/lib/product-story";
 
-export const metadata: Metadata = { title: "Image credits | Trip planner" };
+export const metadata: Metadata = {
+  title: "The plan comes first | 3 Days in Italy",
+  description: "The product thinking, agent architecture and deliberate scope behind 3 Days in Italy.",
+};
 
-export default async function AboutPage() {
-  "use cache";
-  // Load canonical photo credits.
-  cacheLife({ stale: 300, revalidate: 300, expire: 3600 });
-  const [places, fallbackPhotos] = await Promise.all([loadCatalog(), loadDayCoverPhotos()]);
-  return <PhotoCredits places={places} fallbackPhotos={fallbackPhotos} />;
+export default function AboutPage() {
+  // Present the product story.
+  return <ProductStory />;
 }

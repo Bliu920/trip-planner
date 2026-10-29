@@ -9,6 +9,8 @@ export interface AgentEnvironment {
   verifyCommit(): Promise<{ saved: boolean; receipt: { revision: number; summary: string; operation_id: string } | null; snapshot: unknown }>;
   context: unknown;
   initialGeneration?: boolean;
+  resolvePlace?(query: import("@/lib/journeys").PositionQuery): Promise<unknown>;
+  getJourneys?(): Promise<unknown>;
   proposeBudget?(budget: import("@/lib/budget").Budget, reviewed: boolean): Promise<unknown>;
   resolveBudgetGaps?(gaps: import("@/services/budgets").BudgetGap[]): Promise<unknown>;
   recordWebSources?(urls: string[]): void;

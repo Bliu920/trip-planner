@@ -9,7 +9,14 @@ export class ActivityRecorder {
   private entries = new Map<string, ActivityEntry>();
   private tools = new Map<string, string>();
   private calls = new Map<string, string>();
+  private startedAt: number | null = null;
   constructor(private readonly attempt: string, private readonly save: (entry: ActivityEntry) => Promise<void>, private readonly emit: (entry: ActivityEntry) => void) {}
+
+  async start() {
+    if (this.startedAt !== null) return;
+    this.startedAt = Date.now();
+    await this.put("run", { kind: "run", startedAt: new Date(this.startedAt).toISOString() });
+  }
 
   private async put(key: string, update: Partial<ActivityEntry>) {
     const previous = this.entries.get(key);
@@ -48,9 +55,10 @@ export class ActivityRecorder {
     }
   }
 
-  async finish() {
+  async finish(status: "complete" | "interrupted" | "failed" = "complete") {
     for (const [key, entry] of this.entries) {
-      if (entry.status === "running") await this.put(key, { status: "interrupted", detail: "This step ended without a confirmed result." });
+      if (entry.kind !== "run" && entry.status === "running") await this.put(key, { status: "interrupted", detail: "This step ended without a confirmed result." });
     }
+    if (this.startedAt !== null) await this.put("run", { status, elapsedMs: Math.min(86400000, Math.max(0, Date.now() - this.startedAt)) });
   }
 }

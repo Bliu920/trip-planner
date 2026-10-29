@@ -7,9 +7,6 @@ test("Chat starts alone; Library requires an explicit action", () => {
   assert.equal(contentLayout(initialLayout, { type: "select", view: "documents" }).contentOpen, true);
   assert.equal(initialLayout.view,"documents");
   assert.equal(contentLayout(initialLayout,{type:"select",view:"plan"}),initialLayout);
-  const details=contentLayout(initialLayout,{type:"select",view:"details"});
-  assert.equal(details.detailsOpened,true);
-  assert.equal(details.view,"details");
 });
 test("Budget arriving first does not change view or open Plan", () => {
   const state=contentLayout(initialLayout,{type:"availability",artifact:"budget",exists:true,error:""});

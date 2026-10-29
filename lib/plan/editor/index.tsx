@@ -5,6 +5,7 @@ import { useConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { notifyTripChanged, subscribeTripChanges } from "@/lib/trips";
 import photos from "@/data/place-photos.json";
+import { JourneyProvider } from "@/lib/journeys/view";
 import { PlanCanvas } from "../canvas";
 import { PlanSession } from "../session";
 import { applyEdit, type PlanEdit } from "../commands";
@@ -73,6 +74,6 @@ function PlanPanel({ reference, onOpenChat, budgetCard, renderDayContext, onAvai
       <Button className="cursor-pointer" onClick={onOpenChat}>Open chat</Button>
       <Button className="cursor-pointer" variant="outline" disabled={locked} onClick={() => void edit(() => {})}>Create an empty plan</Button>
     </section>}
-    {state.data && plan && <PlanCanvas key={canvasVersion} plan={plan} places={state.data.places} photos={catalogPhotos} fallbackPhotos={state.data.fallbackPhotos} budgetCard={budgetCard} renderDayContext={renderDayContext} embedded locked={locked} feedback={state.error ? `${state.error}${state.pending ? " Close this dialog to use the recovery controls above the plan." : ""}` : ""} onEdit={command} onEditingChange={session.setEditing}/>}
+    {state.data && plan && <JourneyProvider reference={reference} revision={state.data.revision} pending={!!state.pending}><PlanCanvas key={canvasVersion} plan={plan} places={state.data.places} photos={catalogPhotos} fallbackPhotos={state.data.fallbackPhotos} budgetCard={budgetCard} renderDayContext={renderDayContext} embedded locked={locked} feedback={state.error ? `${state.error}${state.pending ? " Close this dialog to use the recovery controls above the plan." : ""}` : ""} onEdit={command} onEditingChange={session.setEditing}/></JourneyProvider>}
   </div>;
 }

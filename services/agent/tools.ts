@@ -11,8 +11,19 @@ export function agentTools(environment: AgentEnvironment, run = new ActionRun(en
   const artifacts = environment.artifacts ? artifactTools(environment, run) : {};
   return {
     ...artifacts,
+    ...(environment.resolvePlace && environment.getJourneys ? {
+      resolvePlace: actionTool(run, "read", {
+        description: "Resolve a researched restaurant or hotel name, street address and city in Italy. Returns host-issued map evidence, matching status and candidate coordinates in longitude/latitude order. Use only matched evidence; ambiguous candidates need better address research. Does not confirm venue identity or availability.",
+        inputSchema: z.object({ name: z.string().trim().min(1).max(300), address: z.string().trim().min(1).max(500), city: z.string().trim().min(1).max(100) }),
+        execute: async query => succeeded(await environment.resolvePlace!(query)),
+      }),
+      getJourneys: actionTool(run, "read", {
+        description: "Check all required journeys in the current effective Plan, including implicit transfers and overnight connections. Returns distances, map duration, buffered allowance and specific timing conflicts. Directions support pure walking and driving, without ferries. Other transport remains unverified. Proposals and final saves also run this check automatically.",
+        inputSchema: z.object({}), execute: async () => succeeded(await environment.getJourneys!()),
+      }),
+    } : {}),
     ...(research ? { researchWeb: actionTool(run, "read", {
-      description: "Research travel facts and prices online and return a readable evidence report with amounts, units, conditions and source URLs. Use for budget research so facts remain available in later planning steps. Batch related costs in one query. Does not save or book anything.",
+      description: "Research travel facts, prices and real restaurants online. Returns readable evidence with source URLs, checked time, venue names and addresses, meal service, prices, units and conditions when found. Use for suitable meal venues missing from the catalog and for budget research. Batch related neighborhood meals or costs. Does not save or book anything.",
       inputSchema: z.object({ query: z.string().trim().min(1).max(4000) }),
       execute: async ({ query }) => succeeded(await research(query)),
     }) } : {}),

@@ -1,3 +1,4 @@
+import { activityWindow } from "./timing";
 import { planSchema } from "./schema";
 import type {
   ActivityTiming,
@@ -92,8 +93,16 @@ export function sourcesIn(value: unknown): SourceRef[] {
   walk(value);
   return found;
 }
-const equal = (a: unknown, b: unknown) =>
-  JSON.stringify(a) === JSON.stringify(b);
+// JSONB may reorder object keys.
+function equal(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (!a || !b || typeof a !== "object" || typeof b !== "object") return false;
+  if (Array.isArray(a) || Array.isArray(b))
+    return Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((value, index) => equal(value, b[index]));
+  const left = a as Record<string, unknown>, right = b as Record<string, unknown>;
+  return Object.keys(left).length === Object.keys(right).length &&
+    Object.keys(left).every(key => Object.hasOwn(right, key) && equal(left[key], right[key]));
+}
 export function inspectPlan(
   value: unknown,
   places: readonly Place[],
@@ -177,7 +186,7 @@ export function inspectPlan(
           (item.kind === "visit" || item.kind === "meal") &&
           loc &&
           loc.type !== "catalog" &&
-          !(item.kind === "meal" && loc.type === "area") &&
+          !(item.kind === "meal" && (loc.type === "area" || loc.type === "restaurant")) &&
           (loc.type !== "specified" || loc.basis.kind !== "user")
         )
           add(
@@ -185,6 +194,28 @@ export function inspectPlan(
             "Choose a place from Explore or one you have provided.",
             [id],
           );
+        if ((loc?.type === "restaurant" && item.kind !== "meal") || (loc?.type === "hotel" && item.kind !== "stay"))
+          add("restaurant_use", "Use a restaurant for meals and a hotel for overnight stays.", [id]);
+        if (item.kind === "meal") {
+          const place = loc?.type === "catalog" ? catalog.get(loc.placeId) : null;
+          const concrete = loc?.type === "restaurant" ||
+            (place && (["restaurant", "cafe"].includes(place.type) || place.type === "market" && place.tags.includes("food"))) ||
+            ((loc?.type === "specified" || loc?.type === "area") && loc.basis.kind === "user");
+          if (!concrete) {
+            const old = previous?.items[id];
+            let unchanged = false;
+            try {
+              unchanged = old?.kind === "meal" &&
+                equal(resolveLocation(previous!, old.location), loc);
+            } catch { /* Broken older references do not excuse a new placeholder. */ }
+            add("meal_venue", unchanged
+              ? "This meal still needs a specific place to eat."
+              : "Choose a specific restaurant or cafe for this meal, with a source for any newly researched place.",
+            [id], unchanged ? "warning" : "error");
+          }
+        }
+        if (item.kind === "stay" && loc?.type === "catalog" && catalog.get(loc.placeId)?.type !== "hotel")
+          add("stay_source", "Choose a researched hotel, a property you provided, or a proposed accommodation area.", [id]);
         if (
           item.kind === "stay" &&
           loc?.type === "specified" &&
@@ -285,25 +316,16 @@ export function inspectPlan(
   for (const day of plan.days) {
     let minimum = 0;
     const intervals: { id: string; start: number; end: number }[] = [];
-    const minutes = (clock: string) =>
-      Number(clock.slice(0, 2)) * 60 + Number(clock.slice(3));
     for (const id of day.itemIds) {
       const item = plan.items[id];
       if (!item) continue;
       const timing = itemTiming(item);
       if (timing?.duration && !item.optional)
         minimum += timing.duration.minMinutes;
-      if (
-        timing?.start?.time &&
-        timing.end?.time &&
-        timing.start.date === timing.end.date
-      ) {
-        const start = minutes(timing.start.time),
-          end = minutes(timing.end.time);
-        if (end > start) {
-          intervals.push({ id, start, end });
-          if (!item.optional) minimum += end - start;
-        }
+      const window = activityWindow(item, dayDate(plan, plan.days.indexOf(day)), plan.days.indexOf(day));
+      if (window.start !== null && window.end !== null && window.end > window.start) {
+        intervals.push({ id, start: window.start, end: window.end });
+        if (!timing?.duration && !item.optional) minimum += window.end - window.start;
       }
     }
     if (minimum > 660)

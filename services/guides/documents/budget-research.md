@@ -23,7 +23,7 @@ For every included stay, transfer, meal allowance, activity and material fee, sa
 2. Otherwise research representative options of the same kind in the same city, with similar season, quality and charging unit. Use current menus, room rates, ticket tariffs or transport fares as numeric anchors. Broaden the comparison only when needed and explain the mismatch.
 3. Make an educated low/high estimate from those anchors. State the calculation and assumptions, including date uncertainty, room sharing, meals covered and fees. Widen the range for uncertainty instead of abandoning the estimate. Keep quoted source facts in sources.detail and your extrapolation in assumptions; never claim a source quotes your derived range.
 
-Missing exact dates, traveler count, chosen hotel or a date-specific booking quote is not a reason to leave ordinary costs unknown. Use the provisional travel dates and per-person scope, with an explicit room-sharing assumption where needed. A representative hotel rate supports an accommodation allowance without inventing a selected hotel. Sample meal prices support a daily food allowance even when restaurants are not selected.
+Missing exact dates, traveler count, chosen hotel or a date-specific booking quote is not a reason to leave ordinary costs unknown. Use the provisional travel dates and per-person scope, with an explicit room-sharing assumption where needed. A representative hotel rate supports an accommodation allowance without inventing a selected hotel. Price the selected meal venues using their menus where possible, or comparable meal prices with explicit assumptions. A daily food allowance may aggregate those meals and link their item IDs, but it does not replace the specific venue choices required by plan-quality.
 
 Unknown is an exceptional execution limitation, not an acceptable completed budget. Use it only when neither direct nor comparable numeric evidence can be obtained or reused, for example unavailable research and no saved evidence. Follow budget-gaps, preserve the missing cost visibly and report the draft budget as incomplete. Never fabricate evidence, use zero for missing costs, or delete costs to make the estimate look complete.
 
@@ -59,3 +59,8 @@ Use createBudget for an absent budget or editBudget for targeted existing-cost u
 
 
 When citing accepted unsaved document text, use its explicitly returned proposedContentRevision and label it as draft evidence. A later text change requires revalidating dependent Plan/Budget content. Final publication checks the actual prepared version. An agent-authored research file preserves external evidence; it does not create user confirmation or independently verified price facts.
+
+
+## Reuse supporting research
+
+Follow planning-documents to read relevant existing Research notes before repeating price or transport research, and update affected findings when checking new sources. Retain original checked dates when reusing evidence. Budget remains the authoritative owner of selected cost entries and totals; Research notes preserve useful source context, not a second cost ledger.

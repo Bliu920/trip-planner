@@ -172,3 +172,21 @@ test("successful modal saves release queued refresh only after closing", async (
   session.setEditing(false); await Promise.resolve();
   assert.equal(session.getSnapshot().data?.revision, 3);
 });
+
+test("definitively rejected journey edits can be corrected without discarding or retrying a save", async () => {
+  let calls = 0;
+  const session = new PlanSession("trip", {
+    load: async () => view(),
+    save: async (_reference, revision, plan) => {
+      if (++calls === 1) throw new PlanRequestError("Allow more time for this journey.", 400, "PLAN_FEASIBILITY");
+      return { savedRevision: revision + 1, snapshot: { plan, revision: revision + 1 } };
+    },
+  });
+  await session.refresh();
+  assert.equal(await session.edit(plan => { plan.days[0].title = "Rejected proposal"; }), false);
+  assert.equal(session.getSnapshot().pending, null);
+  assert.equal(session.getSnapshot().data!.plan!.days[0].title, examplePlan().days[0].title);
+  assert.equal(await session.edit(plan => { plan.days[0].title = "Corrected proposal"; }), true);
+  assert.equal(session.getSnapshot().data!.plan!.days[0].title, "Corrected proposal");
+  assert.equal(calls, 2);
+});

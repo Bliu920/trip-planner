@@ -11,6 +11,7 @@ export type SourceRef =
       section: string | null;
     }
   | { type: "catalog"; placeId: string; field: string | null }
+  | { type: "geo"; evidenceId: string }
   | { type: "web"; url: string; accessedAt: string };
 
 export type Basis = {
@@ -47,10 +48,19 @@ export type PlanNote = {
   sources: SourceRef[];
 };
 
+export type ResearchedLocation = {
+  label: string; address: string; city: string;
+  latitude: number | null; longitude: number | null;
+  geoEvidenceId?: string | null;
+  basis: Basis;
+};
+
 export type Location =
   | { type: "catalog"; placeId: string }
   | { type: "item"; itemId: string }
   | { type: "travel_endpoint"; itemId: string; endpoint: "from" | "to" }
+  | ({ type: "restaurant" } & ResearchedLocation)
+  | ({ type: "hotel" } & ResearchedLocation)
   | {
       type: "specified";
       label: string;

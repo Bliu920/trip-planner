@@ -15,7 +15,9 @@ Updated October 28, 2026. Activity records observable actions inside assistant r
 | services/chat/stream.ts | Feed observable SDK chunks into the recorder and finish remaining steps |
 | lib/chat/use-chat.ts | Preserve prior attempt entries while the SDK regenerates a reply |
 
-Each entry has a stable ID, generation/attempt, title, status, concise detail, source links and document references. Initial history is empty. Started entries update in place and terminal entries cannot regress. Source URLs allow only HTTP(S); raw errors and internal tool names are excluded from display. Research details report returned queries, matched places and sources, without inventing findings or implying source availability verifies every claim. Native web search does not expose a prose findings report; substantive findings remain in the assistant answer or linked research documents.
+Each step entry has a stable ID, generation/attempt, title, status, concise detail, source links and document references. Optional run markers use kind=run, startedAt and terminal elapsedMs within the same bounded JSON store. activityEntries excludes these markers from visible steps; activityRun reads the newest run independently. Initial history is empty. Started entries update in place and terminal entries cannot regress. Source URLs allow only HTTP(S); raw errors and internal tool names are excluded from display. Research details report returned queries, matched places and sources, without inventing findings or implying source availability verifies every claim. Native web search does not expose a prose findings report; substantive findings remain in the assistant answer or linked research documents.
+
+Consecutive entries with the same visible action title and attempt share one presentation row, such as Review planning guidance (2). `groupActivity` derives this view without modifying stored calls. An intervening action or retry starts a new group. The first entry supplies a stable row key as the count increases. Full history retains every invocation's detail, status and sources inside the disclosure and deduplicates saved-file buttons by document ID. Aggregate status prioritizes active work and then failed, unconfirmed, interrupted and prepared outcomes over completed status, so a later completion does not erase an earlier failure.
 
 ## Persistence and recovery
 
@@ -29,15 +31,19 @@ The recorder persists an entry before streaming it. Failure to record progress a
 
 Prepared entries do not mean saved. Brief checkpoint links appear only for persisted results. Commit results expose saved document references; the current file opens through Library's existing scoped document view. Renamed or deleted files retain their historical label; opening a missing file uses the existing recovery UI. Plan, Budget and Library retain all domain validation and persistence ownership.
 
-## Live progress ownership
+## Work disclosure ownership
 
-The [chat response module](chat-response.md) owns the only live spinner and announcement, in a fixed row before the response content. ActivityHistory renders static status icons and permanent disclosures. Running history never hides or replaces the live row. This prevents the spinner from jumping between the response header and individual action rows.
+The [work disclosure module](work-progress.md) owns the only live spinner and announcement inside one section at the response end. Default active presentation shows its latest four current-attempt steps. Completion collapses it to Worked for XXs; a user-expanded history stays open. The full ActivityHistory, including sources and saved-file actions, lives inside the expanded section and retains static step icons.
+
+The recorder now persists a hidden run marker before provider execution and its elapsed duration/final status after work verification. Timing survives streaming/reload and is independent per retry generation. Existing bounded JSON and guarded writes support these optional fields with no migration. Abandoned/legacy runs without a terminal duration never receive guessed seconds.
 
 ## Workspace behavior
 
 Before a saved Plan exists, chat is the only visible panel. The top header opens trip content at the regular width. Library is initially selected, and reopening restores the last selected view. First saved Plan opens the normal content panel once; there is no compact mode, narrow Library, width-expansion animation, or visible empty-plan placeholder. Closing content preserves its mounted state and the chat draft. On mobile, first Plan availability does not move focus away from chat.
 
 ## Validation
+
+October 29 consecutive-count update: lint, typecheck and 14 focused work/response tests passed. Tests cover incrementing counts, grouping before the four-row limit, stable keys, immutable original history, intervening actions, retry boundaries, mixed outcomes and actual rendered preview/history with every source and detail retained. No migration or execution changes.
 
 `tests/activity.test.ts` exercises actual SQL history, checkpoint survival, terminal/idempotent writes, retry generations, abandonment, scope and permissions, safe result projection and storage failure. `tests/chat.test.ts` drives the installed SDK with scripted provider responses and reads activity while the reply is still running, then verifies completion and retry retention. `tests/workspace-layout.test.ts` covers chat-only start, explicit content opening, budget-first behavior, first Plan, closing, refresh and errors. No paid provider calls are needed.
 

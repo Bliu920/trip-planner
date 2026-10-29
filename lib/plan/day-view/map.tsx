@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowUpRight, LocateFixed, Minus, Plus } from "lucide-react";
 import type { Map as LeafletMap, Marker, LatLngBounds } from "leaflet";
+import type { CheckedLeg } from "@/lib/journeys";
 import type { Day, Stop } from "../presentation/model";
 
 const location = (stop: Stop) => stop.omitted ? null : stop.coordinates;
@@ -10,7 +11,7 @@ import "leaflet/dist/leaflet.css";
 type MapState = "loading" | "ready" | "unavailable";
 
 /** Browser-only map lifecycle, separate from itinerary rendering. */
-export function DayMap({ day, selected, selectionRequest, onSelect }: { day: Day; selected: string | null; selectionRequest: number; onSelect: (id: string) => void }) {
+export function DayMap({ day, selected, selectionRequest, onSelect, routes }: { routes?: CheckedLeg[]; day: Day; selected: string | null; selectionRequest: number; onSelect: (id: string) => void }) {
   const container = useRef<HTMLDivElement>(null);
   const map = useRef<LeafletMap | null>(null);
   const bounds = useRef<LatLngBounds | null>(null);
@@ -19,9 +20,17 @@ export function DayMap({ day, selected, selectionRequest, onSelect }: { day: Day
   const [status, setStatus] = useState<MapState>("loading");
   const [attempt, setAttempt] = useState(0);
   // Stable geometry avoids resetting on unrelated host renders.
-  const geometry = JSON.stringify(day.stops.map((stop, index) => ({ id: stop.id, title: stop.title, coordinates: location(stop), number: index + 1 })));
-  const hasLocations = day.stops.some(stop => location(stop));
-  const picked = day.stops.find(stop => stop.id === selected && location(stop));
+  const routeGeometry = JSON.stringify((routes ?? []).filter(route => route.geometry?.length).map(route => ({ geometry: route.geometry, status: route.status })));
+  const mapped = new Map<string, [number, number]>();
+  for (const route of routes ?? []) {
+    if (route.fromCoordinates && !mapped.has(route.fromItemId)) mapped.set(route.fromItemId, [route.fromCoordinates[1], route.fromCoordinates[0]]);
+    if (route.toCoordinates) mapped.set(route.toItemId, [route.toCoordinates[1], route.toCoordinates[0]]);
+  }
+  const mappedLocation = (stop: Stop) => stop.omitted ? null : mapped.get(stop.id) ?? location(stop);
+  const mapStops = [...day.stops, ...(day.stays ?? [])].map(stop => ({ ...stop, coordinates: mappedLocation(stop) }));
+  const geometry = JSON.stringify(mapStops.map((stop, index) => ({ id: stop.id, title: stop.title, coordinates: location(stop), number: index < day.stops.length ? index + 1 : "H" })));
+  const hasLocations = mapStops.some(stop => location(stop)) || !!routes?.some(route => route.geometry?.length);
+  const picked = mapStops.find(stop => stop.id === selected && location(stop));
   const url = picked ? directions(picked) : null;
   useEffect(() => { callback.current = onSelect; }, [onSelect]);
 
@@ -47,7 +56,7 @@ export function DayMap({ day, selected, selectionRequest, onSelect }: { day: Day
       tiles.on("tileerror", () => { if (!cancelled && !loadedTiles) setStatus("unavailable"); });
       tiles.addTo(instance);
       const points: [number, number][] = [];
-      const stops: { id: string; title: string; coordinates: [number, number] | null; number: number }[] = JSON.parse(geometry);
+      const stops: { id: string; title: string; coordinates: [number, number] | null; number: number | string }[] = JSON.parse(geometry);
       stops.forEach(stop => {
         const coordinate = stop.coordinates;
         if (!coordinate) return;
@@ -62,6 +71,12 @@ export function DayMap({ day, selected, selectionRequest, onSelect }: { day: Day
         marker.on("click", () => callback.current(stop.id));
         currentMarkers.set(stop.id, marker);
       });
+      const paths: { geometry: [number, number][]; status: string }[] = JSON.parse(routeGeometry);
+      for (const path of paths) {
+        const latLngs: [number, number][] = path.geometry.map(([longitude, latitude]) => [latitude, longitude]);
+        L.polyline(latLngs, { color: path.status === "conflict" ? "#9b5c31" : "#175b43", weight: 3, opacity: 0.75, attribution: 'Routes: <a href="https://openrouteservice.org" target="_blank" rel="noreferrer">openrouteservice</a>', dashArray: path.status === "checked" ? undefined : "5 7" }).addTo(instance);
+        points.push(...latLngs);
+      }
       bounds.current = L.latLngBounds(points);
       if (points.length) instance.fitBounds(bounds.current, { padding: [32, 32], maxZoom: 15, animate: false });
 
@@ -78,7 +93,7 @@ export function DayMap({ day, selected, selectionRequest, onSelect }: { day: Day
       map.current = null;
       currentMarkers.clear();
     };
-  }, [geometry, hasLocations, attempt]);
+  }, [geometry, routeGeometry, hasLocations, attempt]);
 
   // Link map selection.
   useEffect(() => {
@@ -107,6 +122,6 @@ export function DayMap({ day, selected, selectionRequest, onSelect }: { day: Day
       <div className="dp-map-zoom"><button type="button" className="cursor-pointer" aria-label="Zoom in" onClick={() => map.current?.zoomIn()}><Plus size={16} /></button><button type="button" className="cursor-pointer" aria-label="Zoom out" onClick={() => map.current?.zoomOut()}><Minus size={16} /></button></div>
       {status !== "ready" && <div className="dp-map-message" role="status">{status === "loading" ? "Loading map…" : <>Map could not load.<button type="button" className="cursor-pointer" onClick={() => setAttempt(value => value + 1)}>Retry map</button></>}</div>}
     </div>
-    {picked && <div className="dp-route-caption"><strong>{picked.title}</strong>{url && <a href={url} target="_blank" rel="noreferrer">Directions <ArrowUpRight size={12} /></a>}</div>}
+    <div className="dp-route-caption" aria-hidden={!picked}>{picked && <><strong title={picked.title}>{picked.title}</strong>{url && <a href={url} target="_blank" rel="noreferrer">Directions <ArrowUpRight size={12} /></a>}</>}</div>
   </section>;
 }

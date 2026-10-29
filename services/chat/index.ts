@@ -12,7 +12,7 @@ import { openSession, WorkspaceError } from "@/services/workspace";
 import { agentModel, AgentConfigurationError } from "@/services/agent";
 import { resolveDocuments } from "./documents";
 import { readTurn } from "./validation";
-import { chatErrorMessage, failureCode } from "./provider";
+import { chatErrorMessage, failureCode, reportProviderFailure } from "./provider";
 import { persistedReply } from "./stream";
 
 function failure(message: string, status: number) {
@@ -86,6 +86,7 @@ export async function handleChat(
         environment,
       );
     } catch (error) {
+      const providerDetails = reportProviderFailure(error);
       await saveReply(
         trip.reference,
         input.conversationId,
@@ -93,7 +94,7 @@ export async function handleChat(
         generation,
         "",
         signal.aborted ? "interrupted" : "failed",
-        { code: signal.aborted ? failureCode(signal.reason) : error instanceof DocumentError || error instanceof WorkspaceError || error instanceof ConversationError ? "storage_error" : failureCode(error), steps: 0, elapsedMs: Date.now() - startedAt, finishReason: null },
+        { code: signal.aborted ? failureCode(signal.reason) : error instanceof DocumentError || error instanceof WorkspaceError || error instanceof ConversationError ? "storage_error" : failureCode(error), steps: 0, elapsedMs: Date.now() - startedAt, finishReason: null, ...providerDetails },
       );
       if (error instanceof DocumentError)
         return failure(

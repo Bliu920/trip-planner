@@ -15,3 +15,5 @@ export type { PlanEdit } from "./commands";
 
 export { applyPlanOperations, planOperationSchema } from "./operations";
 export type { PlanOperation } from "./operations";
+
+export { activityWindow } from "./timing";

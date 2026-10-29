@@ -6,3 +6,6 @@ export { listDocuments, getDocument, uploadDocuments, documentUrl, notifyDocumen
 export type { DocumentRef, DocumentSummary, DocumentSource, DocumentStatus, DraftFile } from "./types";
 
 export { DocumentEditor } from "./editor";
+
+export { DocumentNavigationProvider, useDocumentNavigation } from "./navigation";
+export type { DocumentOpenRequest, DocumentTab } from "./navigation";

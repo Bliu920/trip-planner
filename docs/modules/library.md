@@ -3,7 +3,7 @@
 Feature name: **Library**. Individual files remain documents in the data model. Existing `documents` code paths, API routes and stored identifiers retain their technical names for compatibility.
 
 Status: implemented and verified locally. Migration and cleanup scheduler deployment remain pending.
-Last updated: 2026-10-28.
+Last updated: 2026-10-29.
 
 ## Purpose and boundary
 
@@ -18,7 +18,7 @@ Chat owns message history, active document selection and provider-specific model
 - `lib/documents/index.ts`: frontend public entrypoint.
 - `lib/file-types/index.ts`: shared, browser-safe file capability API. `formats.json` is the sole supported-format policy.
 - `lib/documents/types.ts`: metadata contracts and Library name validation; delegates format validation to the shared policy.
-- `lib/documents/`: library, detail and selection controls plus client requests.
+- `lib/documents/`: library, inline file view, selection controls, workspace navigation and client requests.
 - `services/documents/index.ts`: server public entrypoint and HTTP orchestration.
 - `services/documents/`: metadata transactions, original bytes and lifecycle work.
 - `lib/attachments/`: compatibility adapters for existing starter/composer APIs, plus chat draft integration.
@@ -66,6 +66,10 @@ Pending transfers expire after 24 hours of inactivity. Ready documents do not ex
 
 The Library heading shares one row with named icon controls for creating a document, adding files and switching between grid/list views. Tooltips and accessible names describe each action; touch controls are 44px. Grid items use a quiet fill and outline. List rows have dividers only between files, with no trailing rule.
 
+Opening a file replaces the list inside the Library content area with an inline file view. The open file has a compact tab beside Library, a breadcrumb and file actions underneath, and a plain text canvas that fills the remaining area. The top Save control persists the complete file; Rename, Reload and Delete are in the file actions menu. An unsaved indicator appears in the tab. Clicking Library or closing the file tab returns to the list after protecting unsaved changes. Desktop places trip content on the left and chat on the right, as requested. Mobile shows one panel at a time. The workspace navigation and chat remain available; no file dialog opens. The back arrow returns to the previous list position and file focus. Markdown, TXT and CSV open in the shared whole-file editor. PDF and images open in the same area as previews. New files open in this area too and stay there after saving. The list and pending upload selection stay mounted while a file is open.
+
+File links in chat messages, active chat files, activity history and Budget route to the same Library view via `DocumentNavigationProvider`; the workspace selects Library and shows the content panel, including on mobile. A caller outside a workspace can still use the standalone detail dialog. The separate attachment picker remains a dialog because it selects a file instead of opening it. An open editor stays mounted across workspace tab and panel changes. Back and switching to a different file confirm before discarding an unsaved draft. Back is disabled during a save; a file-open request arriving during a save waits until the save settles, then opens or offers to retain an unsaved draft. Starting a new file, renaming, deleting and opening source messages preserve the same draft safeguards.
+
 Library loads its metadata when its workspace tab first opens. The mounted library is retained across tab changes so pending selections and transfers survive switching views. It lists metadata and provides upload, preview, download, rename, use in chat and deletion. A load error is distinct from an empty library. Detail views resolve current state, including tombstones. PDF preview uses the native browser viewer only when `navigator.pdfViewerEnabled` reports support; otherwise the detail shows a concise download fallback. Download remains available for ready documents. This is capability detection, not a guarantee that every PDF will parse. See the [browser capability contract](https://developer.mozilla.org/en-US/docs/Web/API/Navigator/pdfViewerEnabled).
 
 The library defaults to icon view, with a list-view toggle in the same toolbar as Add files. Both views read the same metadata and expose the same open, use-in-chat and incomplete-upload actions. Icon view uses file-type symbols without fetching original bytes; list view adds aligned size/date columns, with the date hidden in narrow panels. View choice is local UI state retained across workspace tab switches, not a saved document property. Add files stages a batch; the upload panel appears only when files are selected. Routine instructions and Saved badges are omitted, while actionable upload errors and lifecycle states remain visible. Metadata refreshes through the existing focus/change subscriptions; failed loads retain a Retry action.
@@ -108,7 +112,7 @@ A forward SQL migration embeds a generated registry projection in `library_file_
 
 The same Library owns generated `planning_context`, `research` and `working` files and editable text of kind `upload`. Kind describes purpose/origin; MIME determines capabilities. New user-created files default to `working`; `upload` is reserved for actual uploads. Existing kind and format are immutable. Supporting context remains Markdown with its stricter 24 KiB domain limit and at most one active file per trip.
 
-`lib/documents/text.ts` defines the whole-file text contract. `lib/documents/editor.tsx` provides one plain text buffer shared by Markdown, TXT and CSV, with Save, Reload and Close. Existing files open directly into the buffer; renaming is a separate file action. New files have a compact filename/format toolbar. All text is literal file content, including headings, fences and CSV rows. There is no section parsing, section selector or formatted editing mode. New filenames without an extension receive the selected format extension. Dialogs define their own color variables because portals do not inherit workspace styles; Save and field borders remain visible. Mobile editing actions use 44px targets. `services/documents/text.ts`, exposed through `index.ts`, owns validation, scoped reads and staged writes. Text bytes live only in private Storage, not SQL or a second context store.
+`lib/documents/text.ts` defines the whole-file text contract. `lib/documents/editor.tsx` provides one plain text buffer shared by Markdown, TXT and CSV, with Save in the file toolbar and Reload in the file actions menu. Existing files open directly into the buffer; renaming is a separate file action. New files have a compact filename/format toolbar. All text is literal file content, including headings, fences and CSV rows. There is no section parsing, section selector or formatted editing mode. New filenames without an extension receive the selected format extension. Dialogs define their own color variables because portals do not inherit workspace styles; Save and field borders remain visible. Mobile editing actions use 44px targets. `services/documents/text.ts`, exposed through `index.ts`, owns validation, scoped reads and staged writes. Text bytes live only in private Storage, not SQL or a second context store.
 
 Each edit has a stable ID, expected metadata revision, name, kind and complete text. The existing API field `markdown` carries raw content for all supported text types for compatibility. Responses include canonical `mediaType`; saves may include it as an additional format consistency check. Creation infers format from a supported filename extension. Extensionless legacy generated names default to Markdown. Unknown suffixes are rejected; rename cannot disguise a file as another type. Existing files may keep an extensionless display name.
 
@@ -194,6 +198,12 @@ Integration preserves the concurrent Audio feature and avoids changing its compo
 
 ## Change history
 
+- Restored the original desktop arrangement: content on the left and chat on the right. The inline file workspace remains unchanged.
+
+- 2026-10-29: Reworked the inline file workspace to follow the supplied desktop layout reference. Added an open-file tab, breadcrumb and compact action bar; removed the bordered form appearance so the plain text editor fills the content area. The temporary panel reversal was later reverted at the user’s request; mobile stays single-panel. Existing file operations, selection and draft protection remain available. Verified desktop and 390px mobile, long filenames, new file creation, save, rename, reload, close/cancel, and delayed-save navigation using isolated data. Lint, typecheck, 327 tests and production build passed.
+
+- 2026-10-29: Open files inline inside the Library content area instead of a file dialog. File links from chat, activity and Budget use the same workspace navigation. New files, previews, return navigation, list position and unsaved drafts stay within the content area. The attachment selection dialog remains separate. Verified desktop and 390px mobile, editing and saving, chat links, draft protection, save-in-progress switching, empty/error states and image previews with isolated data. Lint and 317 tests passed. Project typecheck was blocked by a type error in the concurrently owned evaluation fixture.
+
 - 2026-10-28: Applied the explicit plain-editor correction. Removed section parsing/replacement utilities and the agent section-read option. Existing files open as one text buffer; new filenames/formats use a compact toolbar, and rename remains a separate file action. Verified Markdown/TXT/CSV in the running UI and Markdown save/reload. Lint, typecheck and 43 relevant tests passed. Screenshot: `.local/library-plain-editor.png`.
 
 - 2026-10-28: Added the shared file capability registry, UTF-8 Markdown/TXT/CSV uploads and editing, read-only PDF/image dispatch, AI query/stage enforcement and a generated SQL policy. Text uploads retain their original as revision 1. Simplified the editor and added policy, lifecycle, integrity and concurrency regression checks. Deployment requires the supported-files migration. Verification results are recorded below.
@@ -247,3 +257,13 @@ createDocument accepts a supported filename, kind and content, with host-allocat
 The external field content maps to the existing internal markdown field for Markdown/TXT/CSV. Storage, immutable versions, metadata revisions, file limits and SQL publication remain unchanged. The single Travel brief keeps its reserved identity. Initial saveBrief directly checkpoints it; generic creation only stages. Later changes join final publication.
 
 Draft document citations expose their predicted content revision explicitly as unsaved. Editing that text again invalidates dependent draft Plan/Budget evidence until revalidated. Final preparation checks the actual immutable revision before publication. Citations to exact historical saved content remain historical evidence.
+
+
+## Travel brief access
+
+October 28, 2026: removed the redundant Trip Details gear and workspace panel. Read and edit Travel brief through the same Library file view as other text documents. Its stored identity, revisions and automatic agent loading remain unchanged. Project name and Copy ID stay in the header. The application trip-details guide remains trusted agent guidance, independent of this navigation removal.
+
+
+## Supporting planning records
+
+October 29, 2026: the agent can conditionally maintain Research notes.md using the existing research kind, and Planning decisions.md using working. These are ordinary independently readable Markdown files with existing history, rename and exact-edit behavior. Creation names are defaults, not fixed identities or new database roles. The agent discovers current metadata, reads relevant candidates to establish purpose, reuses their returned IDs, and updates affected content instead of creating duplicate notes. No empty files are generated merely to populate Library. The maintained lifecycle and ownership rules live in the planning-documents guide. User requirements, selected itinerary and cost facts remain in their existing authoritative artifacts.

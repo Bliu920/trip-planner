@@ -2,11 +2,13 @@
 
 import { FILE_ACCEPT, fileFormat, uploadFormat } from "@/lib/file-types";
 
-import { useId, useRef, useState } from "react";
-import { FilePlus2, FileText, LayoutGrid, List, MessageSquarePlus, RotateCcw, Upload, X } from "lucide-react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { ArrowLeft, FilePlus2, FileText, LayoutGrid, List, MessageSquarePlus, RotateCcw, Upload, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useConfirmDialog } from "@/components/ui/confirm-dialog";
+import type { DocumentOpenRequest, DocumentTab } from "./navigation";
 import { DocumentEditor } from "./editor";
-import { DocumentDetail, DocumentIcon, documentSize } from "./controls";
+import { DocumentInlineDetail, DocumentIcon, documentSize } from "./controls";
 import { DocumentUploadError, uploadDocuments, useDocumentList } from "./client";
 import { MAX_FILES, fileError, type DocumentRef, type DraftFile } from "./types";
 import "./documents.css";
@@ -15,9 +17,12 @@ type Props = {
   reference: string;
   onUse?: (document: DocumentRef) => void;
   onOpenMessage?: (conversationId: string, messageId: string) => void;
+  openRequest?: DocumentOpenRequest | null;
+  closeRequest?: string | null;
+  onFileTabChange?: (tab: DocumentTab | null) => void;
 };
 
-export function DocumentLibrary({ reference, onUse, onOpenMessage }: Props) {
+export function DocumentLibrary({ reference, onUse, onOpenMessage, openRequest, closeRequest, onFileTabChange }: Props) {
   const { documents, loading, error, refresh } = useDocumentList(reference);
   const [creating, setCreating] = useState(false);
   const [selected, setSelected] = useState<DraftFile[]>([]);
@@ -26,12 +31,72 @@ export function DocumentLibrary({ reference, onUse, onOpenMessage }: Props) {
   const [uploadError, setUploadError] = useState("");
   const [notice, setNotice] = useState("");
   const [detail, setDetail] = useState<string | null>(null);
+  const [dirty, setDirty] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const { confirm, confirmation } = useConfirmDialog();
+  const handledRequest = useRef<string | null>(null);
+  const handledClose = useRef<string | null>(null);
+  const latestRequest = useRef<string | null>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const createBackButton = useRef<HTMLButtonElement>(null);
+  const listScroll = useRef(0);
   const [resume, setResume] = useState<string | null>(null);
   const [view, setView] = useState<"icons" | "list">("icons");
   const input = useRef<HTMLInputElement>(null);
   const pendingInput = useRef<HTMLInputElement>(null);
   const lock = useRef(false);
   const heading = useId();
+
+  const openRequestedFile = useCallback(async (request: DocumentOpenRequest) => {
+    latestRequest.current = request.requestId;
+    if (detail === request.id && !creating) return;
+    if (dirty && !await confirm("Leave without saving?", "Your unsaved changes will be discarded.", "Discard and open")) return;
+    if (latestRequest.current !== request.requestId) return;
+    if (!detail && !creating) listScroll.current = listRef.current?.closest(".workspace-view")?.scrollTop ?? 0;
+    setDirty(false); setCreating(false); setDetail(request.id);
+    requestAnimationFrame(() => listRef.current?.closest(".workspace-view")?.scrollTo({ top: 0 }));
+  }, [confirm, creating, detail, dirty]);
+  useEffect(() => {
+    if (!openRequest || saving || handledRequest.current === openRequest.requestId) return;
+    handledRequest.current = openRequest.requestId;
+    void openRequestedFile(openRequest);
+  }, [openRequest, openRequestedFile, saving]);
+
+  useEffect(() => { if (creating) createBackButton.current?.focus({ preventScroll: true }); }, [creating]);
+
+  const fileName = detail ? documents.find(file => file.id === detail)?.name ?? "File" : creating ? "New file" : null;
+  useEffect(() => { onFileTabChange?.(fileName ? { id: detail ?? "new", name: fileName, dirty, saving } : null); }, [detail, dirty, fileName, onFileTabChange, saving]);
+  useEffect(() => {
+    if (!closeRequest || saving || handledClose.current === closeRequest) return;
+    handledClose.current = closeRequest;
+    void (async () => {
+      if (dirty && !await confirm("Leave without saving?", "Your unsaved changes will be discarded.", "Discard and leave")) return;
+      const previous = detail;
+      setDirty(false); setCreating(false); setDetail(null);
+      requestAnimationFrame(() => {
+        listRef.current?.closest(".workspace-view")?.scrollTo({ top: listScroll.current });
+        if (previous) listRef.current?.querySelector<HTMLButtonElement>(`[data-file-id="${previous}"]`)?.focus({ preventScroll: true });
+      });
+    })();
+  }, [closeRequest, confirm, detail, dirty, saving]);
+
+  async function closeCreation() {
+    if (dirty && !await confirm("Leave without saving?", "Your unsaved changes will be discarded.", "Discard and leave")) return;
+    setDirty(false); setCreating(false);
+  }
+  function openDetail(id: string) {
+    listScroll.current = listRef.current?.closest(".workspace-view")?.scrollTop ?? 0;
+    setDetail(id);
+    requestAnimationFrame(() => listRef.current?.closest(".workspace-view")?.scrollTo({ top: 0 }));
+  }
+  function closeDetail() {
+    const previous = detail;
+    setDirty(false); setDetail(null);
+    requestAnimationFrame(() => {
+      listRef.current?.closest(".workspace-view")?.scrollTo({ top: listScroll.current });
+      listRef.current?.querySelector<HTMLButtonElement>(`[data-file-id="${previous}"]`)?.focus({ preventScroll: true });
+    });
+  }
 
   function choose(files: File[]) {
     if (lock.current || !files.length) return;
@@ -79,7 +144,14 @@ export function DocumentLibrary({ reference, onUse, onOpenMessage }: Props) {
   }
 
   // Compose independent library.
-  return <section className="document-library" aria-labelledby={heading}>
+  return <section className="document-library" data-file-open={!!detail || creating} aria-label="Library">
+    {confirmation}
+    {creating && <section className="document-inline-view" aria-label="New file">
+      <header className="document-inline-heading"><Button ref={createBackButton} type="button" variant="ghost" size="icon-sm" className="cursor-pointer" disabled={saving} aria-label="Back to Library" title="Back to Library" onClick={() => void closeCreation()}><ArrowLeft size={18} /></Button><h2>New file</h2></header>
+      <DocumentEditor reference={reference} onDirtyChange={setDirty} onSavingChange={setSaving} onSaved={id => { setDirty(false); setCreating(false); setDetail(id); }} />
+    </section>}
+    {detail && <DocumentInlineDetail key={detail} reference={reference} id={detail} onClose={closeDetail} onUse={onUse} onOpenMessage={onOpenMessage} onDirtyChange={setDirty} onSavingChange={setSaving} />}
+    <div ref={listRef} hidden={!!detail || creating}>
     <header className="document-library-heading">
       <div className="document-library-title"><h2 id={heading}>Library</h2>{!loading && !error && <span className="document-count" aria-label={`${documents.length} files`}>{documents.length}</span>}</div>
       <div className="document-toolbar" role="group" aria-label="Library actions">
@@ -90,7 +162,6 @@ export function DocumentLibrary({ reference, onUse, onOpenMessage }: Props) {
         </Button>
       </div>
     </header>
-    {creating && <DocumentEditor reference={reference} onClose={()=>setCreating(false)} />}
     <input ref={input} type="file" hidden multiple disabled={uploading} accept={FILE_ACCEPT} aria-label="Choose files to upload" onChange={event => { choose(Array.from(event.target.files ?? [])); event.target.value = ""; }} />
     <input ref={pendingInput} type="file" hidden disabled={uploading} accept={FILE_ACCEPT} aria-label="Select original file to resume upload" onChange={event => { resumeUpload(event.target.files?.[0]); event.target.value = ""; }} />
     {!!selected.length && <div className="document-upload">
@@ -105,7 +176,7 @@ export function DocumentLibrary({ reference, onUse, onOpenMessage }: Props) {
     {!!documents.length && <div className="document-browser" data-view={view}>
       {view === "list" && <div className="document-list-heading" aria-hidden="true"><span>Name</span><span>Size</span><span>Added</span><span /></div>}
       <ul className="document-files" aria-label="Trip library">{documents.map(document => <li key={document.id} className="document-entry">
-        <button type="button" className="cursor-pointer document-open" aria-label={`Open ${document.name}`} title={document.name} onClick={() => setDetail(document.id)}>
+        <button type="button" data-file-id={document.id} className="cursor-pointer document-open" aria-label={`Open ${document.name}`} title={document.name} onClick={() => openDetail(document.id)}>
           <span className="document-file-icon" data-type={fileFormat(document.mediaType)?.preview ?? "unsupported"}><DocumentIcon mediaType={document.mediaType} /></span>
           <span className="document-file-name"><span className="document-file-title">{document.name}</span>{document.status !== "ready" && <span className="document-state-label">{document.status === "pending" ? "Upload incomplete" : document.status === "deleting" ? "Deletion pending" : "Deleted"}</span>}</span>
           <span className="document-file-size">{documentSize(document.size)}</span>
@@ -114,6 +185,6 @@ export function DocumentLibrary({ reference, onUse, onOpenMessage }: Props) {
         <div className="document-entry-actions">{document.status === "ready" && fileFormat(document.mediaType)?.ai && onUse && <Button type="button" variant="ghost" size="icon-sm" className="cursor-pointer" aria-label={`Use ${document.name} in chat`} title="Use in chat" onClick={() => onUse(document)}><MessageSquarePlus size={16} aria-hidden="true" /></Button>}{document.status === "pending" && <Button type="button" variant="ghost" size="icon-sm" className="cursor-pointer" disabled={uploading} aria-label={`Resume upload of ${document.name}`} title="Select original file" onClick={() => { setResume(document.id); pendingInput.current?.click(); }}><RotateCcw size={16} aria-hidden="true" /></Button>}</div>
       </li>)}</ul>
     </div>}
-    {detail && <DocumentDetail key={detail} reference={reference} id={detail} onClose={() => setDetail(null)} onUse={onUse} onOpenMessage={onOpenMessage} />}
+    </div>
   </section>;
 }

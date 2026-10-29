@@ -15,6 +15,7 @@ const date = z
   }, "Use a real calendar date.");
 const clock = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
 export const sourceSchema = z.discriminatedUnion("type", [
+  z.strictObject({ type: z.literal("geo"), evidenceId: z.uuid() }),
   z.strictObject({
     type: z.literal("message"),
     conversationId: id,
@@ -83,6 +84,14 @@ export const locationSchema = z.discriminatedUnion("type", [
     basis,
   }),
   z.strictObject({ type: z.literal("area"), label: text, basis }),
+  ...(["restaurant", "hotel"] as const).map(type => z.strictObject({
+    type: z.literal(type), label: text, address: text, city: text,
+    geoEvidenceId: z.uuid().nullable().optional(),
+    latitude: z.number().min(-90).max(90).nullable(),
+    longitude: z.number().min(-180).max(180).nullable(),
+    basis: basis.refine(b => b.kind === "research" && b.sources.some(s => s.type === "web"), "A researched venue needs a web source."),
+  }).refine(l => (l.latitude === null) === (l.longitude === null), "Supply both coordinates or leave both unknown.")
+    .refine(l => !l.geoEvidenceId || l.basis.sources.some(s => s.type === "geo" && s.evidenceId === l.geoEvidenceId), "Include the positioning evidence reference.")),
 ]);
 const point = z
   .strictObject({

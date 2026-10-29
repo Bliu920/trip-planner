@@ -6,6 +6,8 @@ export type ReplyFailure = {
   steps: number;
   elapsedMs: number;
   finishReason: string | null;
+  providerReason?: "rate_limit" | "credits_exhausted" | "spend_limit" | "usage_limit" | "quota" | "request_too_large";
+  retryAfterSeconds?: number;
 };
 
 const messages: Record<ReplyFailureCode, string> = {
@@ -21,12 +23,23 @@ const messages: Record<ReplyFailureCode, string> = {
   connection_lost: "The reply stopped unexpectedly, and the reason was not recorded. You can retry to continue.",
 };
 
-export function replyFailureText(code: ReplyFailureCode) {
+export function replyFailureText(code: ReplyFailureCode, details?: Pick<ReplyFailure, "providerReason" | "retryAfterSeconds">) {
+  if (code === "provider_limit") {
+    if (details?.providerReason === "request_too_large") return "This trip request exceeds the assistant's current capacity. The app owner needs to adjust the request size or service limits before retrying.";
+    if (details?.providerReason === "quota") return "The assistant has reached a billing or usage limit. The app owner needs to check service credits and limits before retrying.";
+    if (details?.providerReason === "credits_exhausted") return "The assistant has run out of service credits. The app owner needs to add credits before retrying.";
+    if (details?.providerReason === "spend_limit") return "The assistant has reached its spending limit. The app owner needs to review billing limits before retrying.";
+    if (details?.providerReason === "usage_limit") return "The assistant has reached its usage allowance. The app owner needs to review service limits before retrying.";
+    if (details?.providerReason === "rate_limit") {
+      const seconds = details.retryAfterSeconds;
+      return "The assistant has reached a temporary request limit. " + (typeof seconds === "number" && Number.isFinite(seconds) && seconds > 0 && seconds <= 604800 ? `Wait at least ${Math.ceil(seconds)} seconds before retrying.` : "Wait a moment before retrying.");
+    }
+  }
   return messages[code] ?? messages.connection_lost;
 }
 
 export function replyFailureMessage(message: ChatMessage) {
   const failure = message.parts.findLast(part => part.type === "data-failure");
-  if (failure?.type === "data-failure") return replyFailureText(failure.data.code);
+  if (failure?.type === "data-failure") return replyFailureText(failure.data.code, failure.data);
   return messages.connection_lost;
 }

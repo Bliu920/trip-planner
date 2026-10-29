@@ -14,6 +14,7 @@ This directory is the shared home for maintained, self-contained feature guides.
 | Explore | [explore.md](explore.md) | Implemented; catalog imported and verified |
 | Place references | [place-references.md](place-references.md) | Implemented; migration applied and verified |
 | Markdown | [markdown.md](markdown.md) | Assistant reply formatting, verified locally |
+| Work disclosure | [work-progress.md](work-progress.md) | Trailing preview, full history and saved elapsed time |
 | Chat response | [chat-response.md](chat-response.md) | Centralized live progress and response layout |
 | Project titles | [project-titles.md](project-titles.md) | Implemented; live model and local integration verified |
 | Project header | [project-header.md](project-header.md) | Implemented and verified locally |
@@ -34,3 +35,5 @@ Before editing a module:
 5. Keep deployment prerequisites, known limitations and deferred proposals explicit.
 
 A guide is documentation, not another runtime state store. Code, migrations and persisted data remain authoritative for execution. Do not copy credentials, uploaded contents, or complete raw conversations into guides. Link to neighboring guides for their responsibilities.
+
+- [Locations and routes](geo.md): server positioning, private route evidence, hotel support and feasibility checks.

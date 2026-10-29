@@ -25,7 +25,7 @@ Without Supabase configuration, the place browser can use the bundled data, but 
 ## Routes and access
 
 - `/projects/new` starts a trip or resumes one saved on this device. `/` and `/projects` redirect there.
-- `/trips/:reference` opens the trip workspace. `/explore` browses places; `/about` provides image credits.
+- `/trips/:reference` opens the trip workspace. `/explore` browses places; `/about` explains the product and `/credits` provides image credits.
 - A trip reference grants read and edit access to that trip. Anyone with the link can edit it. Keep links private and retain a copy. Device history is stored locally; there is no account-based recovery.
 - The server uses privileged Supabase access. Browser roles do not have direct access to trip tables. Add deployment-level rate limiting and abuse controls before broad public use of anonymous creation and paid AI requests.
 

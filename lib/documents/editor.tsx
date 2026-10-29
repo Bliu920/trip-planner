@@ -1,7 +1,7 @@
 "use client";
 
 import { useConfirmDialog } from "@/components/ui/confirm-dialog";
-import { useEffect, useId, useState, useRef } from "react";
+import { useEffect, useId, useImperativeHandle, useState, useRef, type Ref } from "react";
 import { EDITABLE_FORMATS, fileFormat, filenameFormat, fileRenameError, fileBytesError } from "@/lib/file-types";
 import { nameError } from "./types";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import {
   type EditableKind,
   type TextDocument,
 } from "./text";
+export type DocumentEditorControl = { save: () => void; reload: () => void };
 export function DocumentEditor({
   reference,
   id,
@@ -17,13 +18,19 @@ export function DocumentEditor({
   onSaved,
   onClose,
   onDirtyChange,
+  onSavingChange,
+  controlRef,
+  toolbar = true,
 }: {
   reference: string;
   id?: string;
   kind?: EditableKind;
-  onSaved?: () => void;
+  onSaved?: (id: string) => void;
   onClose?: () => void;
   onDirtyChange?: (dirty: boolean) => void;
+  onSavingChange?: (saving: boolean) => void;
+  controlRef?: Ref<DocumentEditorControl>;
+  toolbar?: boolean;
 }) {
   const { confirm, confirmation } = useConfirmDialog();
   const label = useId();
@@ -36,6 +43,7 @@ export function DocumentEditor({
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(!!id);
+  const [saving, setSaving] = useState(false);
   const [newId] = useState(() => crypto.randomUUID());
   const [attempt, setAttempt] = useState(0);
   const dirtyRef = useRef(false);
@@ -94,9 +102,14 @@ export function DocumentEditor({
   async function save() {
     const savedName = !record && !id && !/\.[^.\s/\\]+$/.test(name.trim())
       ? `${name.trim()}${fileFormat(mediaType)!.extensions[0]}` : name;
-    const validation = nameError(name) ?? fileRenameError(savedName, mediaType) ?? fileBytesError(mediaType, new TextEncoder().encode(markdown));
+    const renameError = fileRenameError(savedName, mediaType);
+    const formatError = renameError && !targetId
+      ? `Use a ${fileFormat(mediaType)!.extensions.join(" or ")} extension for this file.` : renameError;
+    const validation = nameError(name) ?? formatError ?? fileBytesError(mediaType, new TextEncoder().encode(markdown));
     if (validation) { setError(validation); return; }
     setBusy(true);
+    setSaving(true);
+    onSavingChange?.(true);
     setError("");
     setNotice("");
     try {
@@ -129,9 +142,11 @@ export function DocumentEditor({
         mediaType: body.mediaType,
       });
       setName(body.name);
+      dirtyRef.current = false;
+      onDirtyChange?.(false);
       setNotice("Saved.");
       notifyDocumentsChanged(reference);
-      onSaved?.();
+      onSaved?.(body.id);
     } catch (e) {
       setError(
         e instanceof Error
@@ -140,8 +155,18 @@ export function DocumentEditor({
       );
     } finally {
       setBusy(false);
+      setSaving(false);
+      onSavingChange?.(false);
     }
   }
+  async function reload() {
+    if (dirty && !await confirm("Reload the document?", "Your unsaved text will be discarded.", "Discard and reload")) return;
+    dirtyRef.current = false;
+    setBusy(true);
+    setNotice("");
+    setAttempt(a => a + 1);
+  }
+  useImperativeHandle(controlRef, () => ({ save: () => void save(), reload: () => void reload() }));
   return (
     <section className="document-text-editor">
       {!targetId && <div className="document-editor-toolbar">
@@ -179,30 +204,20 @@ export function DocumentEditor({
         spellCheck={false}
         autoCapitalize="off"
       />
-      <div className="document-actions">
+      {toolbar && <div className="document-actions">
         <Button
           className="cursor-pointer"
           disabled={busy || (!!record && !dirty) || !name.trim() || (!!id && !record)}
           onClick={() => void save()}
         >
-          {busy ? "Working..." : "Save"}
+          {busy ? (saving ? "Saving..." : "Loading...") : "Save"}
         </Button>
         {targetId && (
           <Button
             className="cursor-pointer"
             variant="ghost"
             disabled={busy}
-            onClick={async () => {
-              if (
-                dirty &&
-                !await confirm("Reload the document?", "Your unsaved text will be discarded.", "Discard and reload")
-              )
-                return;
-              dirtyRef.current = false;
-              setBusy(true);
-              setNotice("");
-              setAttempt((a) => a + 1);
-            }}
+            onClick={() => void reload()}
           >
             Reload
           </Button>
@@ -220,7 +235,7 @@ export function DocumentEditor({
             Close editor
           </Button>
         )}
-      </div>
+      </div>}
       {error && (
         <p className="document-error" role="alert">
           {error} Your unsaved text is kept here.
