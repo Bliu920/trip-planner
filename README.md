@@ -7,15 +7,15 @@ An account-free planner for a three-day Italy trip. Explore the supplied places,
 Use Node.js 22 and npm. For a complete local setup, use a Supabase project and an OpenAI API key with access to the configured models.
 
 1. Install the locked dependencies with `npm ci`.
-2. Copy `.env.example` to `.env.local`. Set `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, and `OPENAI_API_KEY` for the features you want to use. Keep this file private. The server also accepts `NEXT_PUBLIC_SUPABASE_URL` and the legacy `SUPABASE_SERVICE_ROLE_KEY` aliases. Never expose a service key to the browser.
-3. For a **new, empty** Supabase project, apply every SQL file in `supabase/migrations/` in filename order. Use your Supabase migration workflow or the SQL editor. Apply them once, in order. The migrations create the tables, functions, access restrictions and private attachment bucket.
+2. Copy `.env.example` to `.env.local`. Replace the placeholders with your own `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, and `OPENAI_API_KEY` for the features you want to use. Remove or leave blank any credentials you do not configure; the example values are not valid credentials. Keep this file private. The server also accepts `NEXT_PUBLIC_SUPABASE_URL` and the legacy `SUPABASE_SERVICE_ROLE_KEY` aliases. Never expose a service key to the browser.
+3. For a **new, empty** Supabase project, apply every SQL file in `supabase/migrations/` in filename order. Use your Supabase migration workflow or the SQL editor. Apply them once, in order. The migrations create the tables, functions, access restrictions and private attachment bucket. Executing SQL manually in the editor does not itself record the versions in the Supabase CLI migration history. Keep track of which method you use and reconcile history before switching workflows.
 4. Import the supplied places and photo assignments after the catalog migration. With the variables available to the process, run:
 
    ```sh
    node --env-file-if-exists=.env.local --import tsx scripts/catalog/index.ts --write
    ```
 
-   This writes to the configured Supabase project and verifies the results. Use `node --import tsx scripts/catalog/index.ts` to validate the local data without writing, or use `--verify` with configured credentials to compare the database with the supplied files.
+   This writes to the configured Supabase project and verifies the results. To validate the local data without writing, run `node --import tsx scripts/catalog/index.ts`. To compare the database with the supplied files without writing, run `node --env-file-if-exists=.env.local --import tsx scripts/catalog/index.ts --verify`.
 5. Run `npm run dev` and open [localhost:3000](http://localhost:3000).
 
 Without Supabase configuration, the place browser can use the bundled data, but trip creation and persistence require storage. AI chat and transcription require the OpenAI key and model access. These services do not silently simulate successful saves. For Library cleanup, configure `DOCUMENT_CLEANUP_SECRET` and a trusted scheduler as described in the [Library guide](docs/modules/library.md).
