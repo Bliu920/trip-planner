@@ -1,0 +1,8 @@
+.agent-composer { padding: 16px 18px 8px; }
+.agent-composer .agent-composer-add { width: var(--prompt-target-size); height: var(--prompt-target-size); padding: 0; border-radius: 50%; color: #222; }
+.agent-composer .agent-composer-add > svg { width: var(--prompt-icon-size); height: var(--prompt-icon-size); stroke-width: 1.8; }
+.agent-file { display: inline-flex; align-items: center; gap: 5px; border: 1px solid #e5e5e5; border-radius: 10px; padding: 5px 8px; max-width: 100%; font-size: 12px; }
+.agent-file > span { overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 700px) {
+  .agent-composer { padding: 14px 12px 8px; }
+}

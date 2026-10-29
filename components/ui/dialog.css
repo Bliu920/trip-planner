@@ -1,0 +1,21 @@
+/* Shared modal geometry. */
+.ui-dialog-overlay { position: fixed; inset: 0; z-index: 100; background: rgb(20 25 21 / 40%); }
+.ui-dialog { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 100; margin: 0; }
+:where(.ui-dialog) { width: min(520px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow: auto; overscroll-behavior: contain; padding: 24px; border: 1px solid #e2e5e0; border-radius: 16px; background: #fff; color: #222; box-shadow: 0 20px 80px #0002; }
+.ui-dialog-header { display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; padding-right: 36px; }
+.ui-dialog-title { font-size: 20px; font-weight: 500; line-height: 1.35; margin: 0; }
+.ui-dialog-description { margin: 0; color: #666660; font-size: 14px; line-height: 1.65; }
+.ui-dialog-footer { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; margin-top: 24px; }
+.ui-dialog-close { position: absolute; top: 14px; right: 14px; display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 8px; color: #666660; background: transparent; }
+.ui-dialog-close:hover, .ui-dialog-close:focus-visible { background: #f0f1ed; color: #222; }
+.ui-dialog:focus, .ui-dialog:focus-visible, .ui-dialog :focus, .ui-dialog :focus-visible { outline: none; }
+.ui-dialog :is(button,input,textarea,select,a):focus-visible { box-shadow: none; }
+@media (prefers-reduced-motion: no-preference) {
+  .ui-dialog-overlay, .ui-dialog { transition: opacity 160ms ease; }
+  .ui-dialog-overlay[data-starting-style], .ui-dialog-overlay[data-ending-style], .ui-dialog[data-starting-style], .ui-dialog[data-ending-style] { opacity: 0; }
+}
+@media (max-width: 600px) {
+  :where(.ui-dialog) { padding: 20px; }
+  .ui-dialog-close { width: 44px; height: 44px; top: 6px; right: 6px; }
+  .ui-dialog-footer > button { min-height: 44px; }
+}

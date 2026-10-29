@@ -1,0 +1,27 @@
+.photo-credits-footer { margin-top: 40px; text-align: right; color: #777; font-size: 12px; }
+.photo-credits-footer a { display: inline-flex; align-items: center; min-height: 44px; padding: 0 4px; }
+.photo-credits-footer a:hover { color: #222; }
+.photo-credits-page { max-width: 960px; margin: 0 auto; padding: 0 32px 64px; color: #222; }
+.photo-credits-page header { display: flex; align-items: center; justify-content: space-between; gap: 24px; min-height: 88px; font-size: 20px; }
+.photo-credits-page .photo-credits-back { font-size: 13px; color: #666; }
+.photo-credits-page section { padding-top: 48px; }
+.photo-credits-page h1 { margin: 0 0 16px; font-size: 30px; letter-spacing: -.6px; font-weight: 500; }
+.photo-credits-intro { max-width: 540px; margin: 0 0 40px; color: #666; line-height: 1.7; }
+.photo-credits-list { list-style: none; margin: 0; padding: 0; }
+.photo-credits-list li { display: grid; grid-template-columns: 80px minmax(0, 1fr) minmax(140px, 210px); gap: 24px; align-items: center; padding: 18px 0; border-top: 1px solid #ecece9; }
+.photo-credits-thumbnail { display: block; border-radius: 6px; overflow: hidden; background: #f0f0ed; height: 60px; }
+.photo-credits-thumbnail img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.photo-credits-place h2 { font-size: 14px; line-height: 1.5; font-weight: 500; margin: 0 0 4px; }
+.photo-credits-place p { margin: 0; font-size: 12px; color: #777; }
+.photo-credits-source { display: flex; flex-direction: column; gap: 4px; font-size: 13px; overflow-wrap: anywhere; }
+.photo-credits-source > span:last-child { font-size: 12px; color: #777; }
+.photo-credits-source:hover > span:first-child { text-decoration: underline; text-underline-offset: 3px; }
+.photo-credits-page a:focus-visible, .photo-credits-footer a:focus-visible { outline: none; background: #eef3ed; color: #075c34; }
+@media (max-width: 600px) {
+  .photo-credits-page { padding: 0 20px 40px; }
+  .photo-credits-page header { min-height: 72px; font-size: 18px; }
+  .photo-credits-page section { padding-top: 28px; }
+  .photo-credits-list li { grid-template-columns: 64px minmax(0, 1fr); gap: 8px 16px; }
+  .photo-credits-thumbnail { grid-row: span 2; height: 64px; }
+  .photo-credits-source { grid-column: 2; flex-direction: row; flex-wrap: wrap; gap: 4px 12px; }
+}

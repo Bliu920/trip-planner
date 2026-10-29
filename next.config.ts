@@ -1,7 +1,16 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  outputFileTracingIncludes: {
+    "/api/trips/*/chat": ["./services/guides/documents/*.md"],
+  },
+  // Redirect before rendering.
+  redirects() {
+    return [
+      { source: "/", destination: "/projects/new", permanent: false },
+      { source: "/projects", destination: "/projects/new", permanent: false },
+    ];
+  },
   experimental: {
     agentFeedback: true,
   },

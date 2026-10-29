@@ -1,0 +1,156 @@
+import { randomUUID } from "node:crypto";
+import assert from "node:assert/strict";
+import { after, afterEach, before, beforeEach, test } from "node:test";
+import type { PGlite } from "@electric-sql/pglite";
+import { createDatabase, seed, databaseFetch, reference, conversation, generation } from "./chat-fixture";
+import { examplePlan, fixturePricedBudget } from "./plan-fixture";
+import { openSession } from "../services/workspace";
+import { beginTurn } from "../services/conversations";
+import { getPlan, savePlan } from "../services/plans";
+import { agentTools } from "../services/agent/tools";
+import type { ArtifactEnvironment } from "../services/agent/contracts";
+let db: PGlite, files: Map<string, string>;
+const oldFetch = globalThis.fetch;
+const keys = ["SUPABASE_URL", "SUPABASE_SECRET_KEY", "AGENT_WEB_SEARCH"];
+const oldEnv = keys.map(key => process.env[key]);
+before(async () => { db = await createDatabase(); });
+after(() => db.close());
+beforeEach(async () => {
+  await seed(db); files = new Map();
+  Object.assign(process.env, { SUPABASE_URL: "https://db.example", SUPABASE_SECRET_KEY: "sb_secret_fixture", AGENT_WEB_SEARCH: "false" });
+  globalThis.fetch = async (url, init) => {
+    const target = new URL(String(url));
+    assert.equal(target.hostname, "db.example", "No live model calls in deterministic tests.");
+    const root = "/storage/v1/object/";
+    if (target.pathname.startsWith(root + "authenticated/")) return new Response(files.get(target.pathname.slice((root + "authenticated/").length)) ?? null, { status: files.has(target.pathname.slice((root + "authenticated/").length)) ? 200 : 404 });
+    if (target.pathname.startsWith(root) && init?.method === "POST") { files.set(target.pathname.slice(root.length), String(init.body)); return Response.json({}); }
+    return databaseFetch(db, target, init);
+  };
+});
+afterEach(() => { globalThis.fetch = oldFetch; keys.forEach((key, i) => { if (oldEnv[i] === undefined) delete process.env[key]; else process.env[key] = oldEnv[i]; }); });
+async function session() {
+  const turn = await beginTurn(reference, { conversationId: conversation, expectedLastId: null, retry: false, message: { id: "v2-user", text: "Plan three days in Rome" } }, generation);
+  const environment = await openSession(reference, conversation, turn.responseId, generation, new AbortController().signal);
+  return { environment, api: environment.artifacts!, turn };
+}
+const token = (api: ArtifactEnvironment) => (api.manifest() as { editToken: string }).editToken;
+const plan = (api: ArtifactEnvironment) => (api.readPlan({ view: "effective", selector: "full", ids: [] }) as { plan: ReturnType<typeof examplePlan> }).plan;
+async function initial(api: ArtifactEnvironment, environment: Awaited<ReturnType<typeof session>>["environment"]) {
+  await api.createPlan(token(api), examplePlan(), []);
+  environment.recordWebSources!(["https://example.com/test-rate"]);
+  await api.createBudget(token(api), fixturePricedBudget(), true);
+}
+test("V2 effective reads expose accepted drafts and local edits without changing saved state", async () => {
+  const { api, environment } = await session(); const old = token(api);
+  assert.equal((api.readPlan({ view: "effective", selector: "full", ids: [] }) as { exists: boolean }).exists, false);
+  await initial(api, environment);
+  assert.equal((api.readPlan({ view: "saved", selector: "full", ids: [] }) as { exists: boolean }).exists, false);
+  const before = structuredClone(plan(api));
+  await api.editPlan(token(api), [{ type: "updateDay", id: "day-2", fields: { title: "Relaxed day" } }], []);
+  assert.deepEqual(plan(api).days[0], before.days[0]); assert.deepEqual(plan(api).items, before.items);
+  await assert.rejects(api.editPlan(old, [{ type: "updateDay", id: "day-1", fields: { title: "Stale" } }], []), /draft changed/);
+  await api.editPlan(token(api), [{ type: "updateDay", id: "day-1", fields: { title: "Reconciled" } }], []);
+  const inspected = await api.inspectChanges() as { diff: { days: { id: string }[] }; saved: boolean };
+  assert.equal(inspected.saved, false);
+  const result = await api.commit(token(api), "Saved V2 draft", ["v2-user"]) as { saved: boolean };
+  assert.equal(result.saved, true); assert.equal((await getPlan(reference)).plan!.days[1].title, "Relaxed day");
+  assert.equal((await api.commit(old, "Retry", ["v2-user"]) as { saved: boolean }).saved, true);
+});
+test("rejected edit retains accepted Plan but blocks an unrelated final save", async () => {
+  const { api, environment } = await session(); await initial(api, environment);
+  const before = structuredClone(plan(api));
+  const bad = await api.editPlan(token(api), [{ type: "updateDay", id: "day-1", fields: { startLocation: { type: "item", itemId: "missing" } } }], []) as { valid: boolean };
+  assert.equal(bad.valid, false); assert.deepEqual(plan(api), before);
+  await api.editBudget(token(api), [{ type: "setLimit", value: 500 }, { type: "recordReview" }]);
+  await assert.rejects(api.commit(token(api), "Cannot hide failed edit", ["v2-user"]), /rejected changes/);
+  await api.editPlan(token(api), [{ type: "updateDay", id: "day-1", fields: { title: "Corrected" } }], []);
+  assert.equal((await api.commit(token(api), "Corrected", ["v2-user"]) as { saved: boolean }).saved, true);
+});
+test("Document creation/read/edit preserves exact bytes and protects against ambiguous edits", async () => {
+  const { api } = await session();
+  const created = await api.createDocument(token(api), "Notes.txt", "working", "Food\r\nPasta\r\nStay\r\nCentral\r\n") as { id: string };
+  assert.equal((await api.readDocument({ id: created.id, view: "saved", contentRevision: null }) as { exists: boolean }).exists, false);
+  await assert.rejects(api.editDocument(token(api), created.id, [{ type: "rename", name: "Changed.txt" }, { type: "replaceText", oldText: "\r\n", newText: "x" }]), /exactly once/);
+  assert.equal((await api.readDocument({ id: created.id, view: "effective", contentRevision: null }) as { name: string }).name, "Notes.txt");
+  await api.createDocument(token(api), "Other.csv", "working", "a,b\n1,2");
+  await assert.rejects(api.commit(token(api), "Unrelated edit", ["v2-user"]), /rejected changes/);
+  await api.editDocument(token(api), created.id, [{ type: "replaceText", oldText: "Pasta", newText: "Pizza" }]);
+  await api.commit(token(api), "Saved notes", ["v2-user"]);
+  const saved = await api.readDocument({ id: created.id, view: "saved", contentRevision: 1 }) as { content: string; editToken?: string };
+  assert.equal(saved.content, "Food\r\nPizza\r\nStay\r\nCentral\r\n"); assert.equal(saved.editToken, undefined);
+});
+test("current head reads detect conflicts without rebasing accepted edits", async () => {
+  const { api } = await session();
+  await api.createPlan(token(api), examplePlan(), []);
+  await savePlan(reference, 0, examplePlan(), randomUUID());
+  const old = token(api), result = await api.readEnvironment() as { conflictDetected: boolean; baseRevision: number };
+  assert.equal(result.conflictDetected, true); assert.equal(result.baseRevision, 0); assert.equal(token(api), old);
+  assert.equal((api.readPlan({ view: "saved", selector: "full", ids: [] }) as { exists: boolean }).exists, false);
+});
+test("real workspace registry exposes V2 only and malformed writes block completion", async () => {
+  const { api, environment } = await session(); const tools = agentTools(environment);
+  for (const name of ["createPlan", "editPlan", "createBudget", "editBudget", "createDocument", "editDocument", "readEnvironment", "inspectChanges"]) assert.ok(name in tools);
+  for (const name of ["proposePlan", "proposeBudget", "stageDocument", "verifySave"]) assert.equal(name in tools, false);
+  assert.equal(Object.keys(tools).length, 21);
+  await initial(api, environment);
+  api.rejectInput("editPlan", {});
+  await assert.rejects(api.commit(token(api), "No", ["v2-user"]), /rejected changes/);
+  await api.editPlan(token(api), [{ type: "updateDay", id: "day-2", fields: { title: "Repaired" } }], []);
+  await api.commit(token(api), "Recovered", ["v2-user"]);
+});
+test("agent edits cannot introduce direct-edit provenance", async () => {
+  const { api, environment } = await session(); await initial(api, environment);
+  await assert.rejects(api.editPlan(token(api), [{ type: "setStartDate", value: { value: "2026-11-04", basis: { kind: "user", sources: [{ type: "direct_edit" }], explanation: null } } }], []), /Agent-authored facts/);
+});
+
+test("temporary cross-artifact link gaps are inspectable and must be repaired before publication", async () => {
+  const { api, environment } = await session(); await initial(api, environment);
+  await api.editBudget(token(api), [{ type: "updateEntry", id: "stay", fields: { planItemIds: ["missing"] } }]);
+  const findings = api.readBudget({ view: "effective", selector: "full", ids: [] }) as { linkFindings: unknown[] };
+  assert.equal(findings.linkFindings.length, 1);
+  await assert.rejects(api.commit(token(api), "Cannot publish dangling links", ["v2-user"]), /linked Budget/);
+  await api.editBudget(token(api), [{ type: "updateEntry", id: "stay", fields: { planItemIds: ["visit-1"] } }, { type: "recordReview" }]);
+  await api.commit(token(api), "Fixed links", ["v2-user"]);
+});
+test("a later draft document edit invalidates dependent Plan evidence until revalidated", async () => {
+  const { api, environment } = await session();
+  const doc = await api.createDocument(token(api), "Research.md", "research", "Suggested visit: 60 to 90 minutes.") as { id: string };
+  const p = examplePlan(), item = p.items["visit-1"];
+  if (item.kind === "stay" || item.kind === "travel") throw new Error("Expected activity fixture");
+  item.timing.duration!.basis = { kind: "research", explanation: null, sources: [{ type: "document", documentId: doc.id, revision: 1, section: null }] };
+  await api.createPlan(token(api), p, []);
+  environment.recordWebSources!(["https://example.com/test-rate"]);
+  await api.createBudget(token(api), fixturePricedBudget(), true);
+  await api.editDocument(token(api), doc.id, [{ type: "replaceText", oldText: "60 to 90", newText: "60 to 120" }]);
+  await assert.rejects(api.commit(token(api), "Evidence changed", ["v2-user"]), /rejected changes/);
+  await api.editPlan(token(api), [{ type: "updateItem", id: "visit-1", fields: { timing: { ...item.timing, duration: { ...item.timing.duration!, maxMinutes: 120 } } } }], []);
+  await api.commit(token(api), "Revalidated", ["v2-user"]);
+});
+test("document paging invalidates its cursor on changes, and draft renames retain their format", async () => {
+  const { api } = await session();
+  const first = await api.createDocument(token(api), "A.txt", "working", "one") as { id: string };
+  await api.createDocument(token(api), "B.csv", "working", "a,b\n1,2");
+  const query = { view: "effective" as const, kind: null, format: null, query: null, cursor: null, limit: 1 };
+  const page = api.listDocuments(query) as { nextCursor: string };
+  assert.ok(page.nextCursor);
+  await assert.rejects(api.editDocument(token(api), first.id, [{ type: "rename", name: "A.csv" }]), /extension|format|type|name/i);
+  assert.equal((await api.readDocument({ id: first.id, view: "effective", contentRevision: null }) as { name: string }).name, "A.txt");
+  await api.editDocument(token(api), first.id, [{ type: "rename", name: "C.txt" }]);
+  assert.throws(() => api.listDocuments({ ...query, cursor: page.nextCursor }), /Restart/);
+});
+test("failed reload keeps the accepted draft; successful reload requires discarded documents to be restaged", async () => {
+  const { api } = await session();
+  await api.saveBrief(token(api), "# Preferences\nRelaxed pace", 0);
+  const doc = await api.createDocument(token(api), "Notes.txt", "working", "Keep this draft") as { id: string };
+  const fetch = globalThis.fetch;
+  globalThis.fetch = async (url, init) => String(url).includes("/authenticated/") ? new Response(null, { status: 503 }) : fetch(url, init);
+  await assert.rejects(api.reload(token(api)));
+  assert.equal((await api.readDocument({ id: doc.id, view: "effective", contentRevision: null }) as { content: string }).content, "Keep this draft");
+  globalThis.fetch = fetch;
+  await api.reload(token(api));
+  assert.equal((await api.readDocument({ id: doc.id, view: "effective", contentRevision: null }) as { exists: boolean }).exists, false);
+  assert.ok((api.manifest() as { brief: unknown }).brief);
+  await api.createDocument(token(api), "Notes.txt", "working", "Restaged draft");
+  const inspected = await api.inspectChanges() as { blockers: { artifact: string }[] };
+  assert.equal(inspected.blockers.some(blocker => blocker.artifact.startsWith("documents")), false);
+});

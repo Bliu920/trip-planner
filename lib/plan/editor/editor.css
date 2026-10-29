@@ -1,0 +1,10 @@
+/* Plan owns its panel content. */
+.plan-editor { min-height: 100%; background: var(--background); color: #203c32; font-family: "Avenir Next", "Segoe UI", sans-serif; }
+.plan-editor > .plan-error { margin: 12px 16px; }
+.plan-loading { padding: 24px; font-size: 13px; color: #6b7a70; }
+.plan-empty { max-width: 420px; margin: auto; padding: 64px 24px; text-align: center; }
+.plan-empty h2 { font-size: 20px; font-weight: 500; }
+.plan-empty p { font-size: 13px; line-height: 1.7; margin: 12px 0 20px; color: #6b7a70; }
+.plan-empty button { margin: 4px; }
+.plan-error { color:#9f302c; border:1px solid #d6aaa4; padding:12px; border-radius:8px; font-size:13px; }
+.plan-error p + p { margin-top:6px; }

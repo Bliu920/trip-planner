@@ -1,0 +1,103 @@
+[
+  {
+    "id": "markdown",
+    "label": "Markdown",
+    "mime": "text/markdown",
+    "aliases": [
+      "text/x-markdown",
+      "text/plain"
+    ],
+    "extensions": [
+      ".md",
+      ".markdown"
+    ],
+    "maxBytes": 262144,
+    "minBytes": 0,
+    "editor": "text",
+    "preview": "text",
+    "ai": "text",
+    "create": true
+  },
+  {
+    "id": "text",
+    "label": "Text",
+    "mime": "text/plain",
+    "aliases": [],
+    "extensions": [
+      ".txt"
+    ],
+    "maxBytes": 262144,
+    "minBytes": 0,
+    "editor": "text",
+    "preview": "text",
+    "ai": "text",
+    "create": true
+  },
+  {
+    "id": "csv",
+    "label": "CSV",
+    "mime": "text/csv",
+    "aliases": [
+      "application/csv",
+      "text/plain",
+      "application/vnd.ms-excel"
+    ],
+    "extensions": [
+      ".csv"
+    ],
+    "maxBytes": 262144,
+    "minBytes": 0,
+    "editor": "text",
+    "preview": "text",
+    "ai": "text",
+    "create": true
+  },
+  {
+    "id": "pdf",
+    "label": "PDF",
+    "mime": "application/pdf",
+    "aliases": [],
+    "extensions": [
+      ".pdf"
+    ],
+    "maxBytes": 5242880,
+    "minBytes": 1,
+    "editor": "none",
+    "preview": "pdf",
+    "ai": "file",
+    "create": false
+  },
+  {
+    "id": "png",
+    "label": "PNG",
+    "mime": "image/png",
+    "aliases": [],
+    "extensions": [
+      ".png"
+    ],
+    "maxBytes": 5242880,
+    "minBytes": 1,
+    "editor": "none",
+    "preview": "image",
+    "ai": "file",
+    "create": false
+  },
+  {
+    "id": "jpeg",
+    "label": "JPEG",
+    "mime": "image/jpeg",
+    "aliases": [
+      "image/jpg"
+    ],
+    "extensions": [
+      ".jpg",
+      ".jpeg"
+    ],
+    "maxBytes": 5242880,
+    "minBytes": 1,
+    "editor": "none",
+    "preview": "image",
+    "ai": "file",
+    "create": false
+  }
+]

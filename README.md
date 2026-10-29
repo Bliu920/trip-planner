@@ -1,36 +1,60 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 3 Days in Italy
 
-## Getting Started
+An account-free planner for a three-day Italy trip. Explore the supplied places, create a trip, chat with an assistant, edit an itinerary and budget, and keep supporting documents in the trip library. Opening hours, availability and prices can be uncertain and should be checked before travel.
 
-First, run the development server:
+## Local setup
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+Use Node.js 22 and npm. For a complete local setup, use a Supabase project and an OpenAI API key with access to the configured models.
+
+1. Install the locked dependencies with `npm ci`.
+2. Copy `.env.example` to `.env.local`. Set `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, and `OPENAI_API_KEY` for the features you want to use. Keep this file private. The server also accepts `NEXT_PUBLIC_SUPABASE_URL` and the legacy `SUPABASE_SERVICE_ROLE_KEY` aliases. Never expose a service key to the browser.
+3. For a **new, empty** Supabase project, apply every SQL file in `supabase/migrations/` in filename order. Use your Supabase migration workflow or the SQL editor. Apply them once, in order. The migrations create the tables, functions, access restrictions and private attachment bucket.
+4. Import the supplied places and photo assignments after the catalog migration. With the variables available to the process, run:
+
+   ```sh
+   node --env-file-if-exists=.env.local --import tsx scripts/catalog/index.ts --write
+   ```
+
+   This writes to the configured Supabase project and verifies the results. Use `node --import tsx scripts/catalog/index.ts` to validate the local data without writing, or use `--verify` with configured credentials to compare the database with the supplied files.
+5. Run `npm run dev` and open [localhost:3000](http://localhost:3000).
+
+Without Supabase configuration, the place browser can use the bundled data, but trip creation and persistence require storage. AI chat and transcription require the OpenAI key and model access. These services do not silently simulate successful saves. For Library cleanup, configure `DOCUMENT_CLEANUP_SECRET` and a trusted scheduler as described in the [Library guide](docs/modules/library.md).
+
+**Existing databases:** migration files were renamed for the product baseline. Some older versions were already applied to an existing database. Do not blindly rerun or repair them. Compare the actual schema and migration history with the [old-to-new mapping](docs/migration-versions.md), then plan reconciliation for that database before applying further migrations. The mapping does not establish which migrations have been applied in any particular environment.
+
+## Routes and access
+
+- `/projects/new` starts a trip or resumes one saved on this device. `/` and `/projects` redirect there.
+- `/trips/:reference` opens the trip workspace. `/explore` browses places; `/about` provides image credits.
+- A trip reference grants read and edit access to that trip. Anyone with the link can edit it. Keep links private and retain a copy. Device history is stored locally; there is no account-based recovery.
+- The server uses privileged Supabase access. Browser roles do not have direct access to trip tables. Add deployment-level rate limiting and abuse controls before broad public use of anonymous creation and paid AI requests.
+
+## AI and research
+
+The server uses the configured OpenAI model for trip chat. The current allowed default and provider details are documented in the [Agent guide](docs/modules/agent.md). Web research is enabled unless `AGENT_WEB_SEARCH=false`; it can incur provider costs. The assistant uses the supplied catalog and can save a Plan, Budget and supporting documents. Research quality and availability must be verified independently; an automated test is not a live acceptance test.
+
+The chat route requests a 600-second hosting duration and uses a 540-second application timeout. The agent uses a 14,000-token output limit per model call and does not automatically retry provider requests. Hosting plans can impose lower limits. For workflow, persistence and current limits, see the [Agent guide](docs/modules/agent.md) and [action results](docs/modules/agent-actions.md).
+
+## Checks
+
+```sh
+npm run lint
+npm run typecheck
+npm test
+npm run build
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Tests use isolated fixtures and mocked providers where documented. Passing tests does not verify a hosted database, deployed cleanup scheduler, microphone, model access or live research.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Code structure
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- `app/`: page and API entry points.
+- `lib/`: frontend modules and shared types, validation and domain logic.
+- `services/`: server-side orchestration, persistence and agent tools.
+- `components/ui/`: reusable UI controls.
+- `data/`: source catalog and photo metadata.
+- `supabase/migrations/`: ordered database changes.
+- `tests/`, `scripts/`: regression tests and maintenance tools.
+- `docs/modules/`: maintained feature guides. Update them with changes under the [maintenance contract](docs/modules/README.md). Frontend changes also follow [UI principles](docs/ui-principles.md).
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Local experiments, when present, live under ignored `.local/experiments/` and are not part of this repository's production application.

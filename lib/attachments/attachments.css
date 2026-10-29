@@ -1,0 +1,19 @@
+.attachment-add { width: var(--prompt-target-size, 32px); height: var(--prompt-target-size, 32px); border: calc((var(--prompt-target-size, 32px) - var(--prompt-action-size, 32px)) / 2) solid transparent; border-radius: 50%; background-clip: padding-box; color: #666; }
+.attachment-add > svg { width: var(--prompt-icon-size, 17px); height: var(--prompt-icon-size, 17px); }
+.attachment-menu-positioner { z-index: 60; }
+.attachment-menu { width: 244px; max-width: calc(100vw - 24px); max-height: var(--available-height); overflow-y: auto; padding: 5px; border: 1px solid #e5e5e5; border-radius: 14px; background: #fff; color: #222; box-shadow: 0 8px 28px #00000012, 0 2px 6px #00000008; outline: none; transform-origin: var(--transform-origin); }
+.attachment-menu-item { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 8px 10px; border-radius: 9px; font-size: 13px; line-height: 20px; outline: none; user-select: none; }
+.attachment-menu-item > svg { width: 17px; height: 17px; flex-shrink: 0; color: #666; }
+.attachment-menu-item[data-highlighted] { background: #f3f3f0; }
+.attachment-menu-item:focus-visible { background: #ebebe7; }
+@media (max-width: 600px), (pointer: coarse) {
+  .attachment-menu-item { min-height: 44px; }
+}
+.attachment-chip { display: inline-flex; align-items: center; gap: 7px; max-width: 100%; min-width: 0; border: 1px solid #e5e5e5; border-radius: 10px; padding: 5px 8px; font-size: 12px; line-height: 20px; color: inherit; text-decoration: none; }
+.attachment-chip > svg { flex-shrink: 0; }
+.attachment-chip > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.saved-attachments { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+a.attachment-chip:hover { background: #f3f3f0; }
+.attachment-error, .attachment-progress { margin: 8px 4px 0; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.attachment-error { color: #a03226; }
+.attachment-progress { color: #666; }

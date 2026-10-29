@@ -39,3 +39,16 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Safe configuration template
+!.env.example
+
+# Private local reference files
+/.local/
+
+# Local AI agent setup
+/CLAUDE.md
+/docs/tasks/main-agent-setup/
+
+# Local Supabase CLI state
+/supabase/.temp/

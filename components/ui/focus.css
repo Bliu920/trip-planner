@@ -1,0 +1,18 @@
+/* Enforce the ring-free policy. */
+/* Important overrides legacy module outlines and browser defaults. */
+:focus,
+:focus-visible {
+  outline: none !important;
+}
+:is(button, a, input, textarea, select, summary, [role="button"], [role="tab"], [role="menuitem"], [data-slot]):focus-visible {
+  box-shadow: none !important;
+}
+
+/* Keep keyboard position visible. */
+:where(button, a, summary, [role="button"], [role="tab"], [role="menuitem"]):focus-visible {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+[data-slot="input-group"]:focus-within {
+  box-shadow: none;
+}
