@@ -4,7 +4,7 @@ This is a review worksheet for [I02](initial.md#i02-complete-single-city-request
 
 ## Input and observable result
 
-Two adults request Rome for November 4 to6,2026, with history and food interests, moderate pace and EUR800 total excluding flights. The saved Travel brief preserves those sourced requirements and questions. Budget owns the normalized limit and exclusions. The Plan owns the selected schedule and both nights. Original messages remain the source; no raw-input copy or second schedule is required.
+Two adults request Rome for November 4 to 6, 2026, with history and food interests, moderate pace and EUR 800 total excluding flights. The saved Travel brief preserves those sourced requirements and questions. Budget owns the normalized limit and exclusions. The Plan owns the selected schedule and both nights. Original messages remain the source; no raw-input copy or second schedule is required.
 
 A passing candidate has:
 

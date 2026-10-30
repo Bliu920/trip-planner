@@ -1,31 +1,27 @@
 # Product story
 
-Updated October 29, 2026.
+Updated October 30, 2026.
 
 ## Purpose and ownership
 
-`/about` explains the product and engineering decisions behind 3 Days in Italy for assessment reviewers. It is an English first-person narrative, with explicit prototype limitations and AI-use disclosure. The existing start and Explore footers already link to About. Original photography attribution remains at `/credits`, using the existing photo-credit module.
+`/about` introduces 3 Days in Italy as a product. The hero is “AI travel planner”, followed by a full static Plan and Chat workspace. Alternating visual/text sections explain discovery, the daily itinerary and budget, and Library. Design rationale supports the feature narrative. Agent architecture, guide iteration and research references sit in optional disclosures, followed by scope and AI-use notes. This web explanation is not a verified two-page submission note.
 
-`lib/product-story/index.tsx` owns the public page composition, `chapters.tsx` owns the narrative, `reading.tsx` owns chapter tracking, architecture tabs and screenshot dialogs, and `story.css` owns their responsive presentation. No runtime agent or trip behavior changes.
+`lib/product-story/index.tsx` composes the page. `chapters.tsx` owns feature sections and disclosures. `reading.tsx` owns sticky anchor navigation and the optional architecture tabs. `story.css` owns the landing layout. Start Page navigation links to About, and original photography attribution remains at `/credits`.
 
-The architecture separates application guides from Library evidence and decisions, identifies authoritative Plan/Budget/brief ownership, describes targeted staging and receipt-backed saves, and distinguishes deterministic validation from travel quality. Keep these claims aligned with the maintained Agent, Plan, Budget and Guides documentation as the product changes. The page is a blog-style explanation, not a certified two-page print submission.
+## Static workspace
 
-## Screenshot provenance
+`lib/product-demo/index.ts` composes the full hero workspace and exports shared example data. `data.ts` owns fixed illustrative arrangements/costs and existing catalog photo selections. `workspace.tsx` composes production `DayCard` and `TripSummary` components with static Chat. `demo.css` scopes the workspace layout. The workspace is inert and described as an image; mobile scales both panels together.
 
-`public/product-story/` contains four JPEG captures of the actual production UI components. Plan and Day use the existing `tests/fixtures/plan/fixtures.ts` Florence data through a temporary preview route removed after capture. Library uses an isolated in-memory PGlite database and illustrative notes, with provider calls blocked. Explore uses the actual start page and supplied places. These screenshots contain no actual trip access codes or credentials. Captions identify the itinerary and working notes as illustrative, not verified arrangements or live research. Current photo credits still apply to the imagery visible inside the captures.
+## Feature previews
 
-The ignored local capture adapter is `.local/product-story-fixture.ts`. It is verification infrastructure, not a deployed service. Do not ship temporary screenshot routes.
+`lib/product-preview/index.tsx` exposes DiscoveryPreview, TripPreview and LibraryPreview, and owns presentation-only day/budget tabs. `visuals.tsx` composes static UI with production PromptInput, PlaceChips, PlaceCard, ExploreControls, DayCard, StopDetails, DayMap and BudgetDetails components. `data.ts` owns catalog-backed examples and the derived sample budget. `previews.css` scopes preview framing and responsive behavior. Discovery follows the actual Start Page hierarchy: prompt first, Explore/Projects navigation and compact controls second, then the original card grid with image-corner toggles and ratings. Its desktop canvas scales the source UI rather than restyling the cards. The budget is a derived view of the same sample cost data used in the hero. It contains illustrative estimates without researched sources and must never be saved as a real budget.
 
-## Interaction and limits
+The embedded UI is inert and exposed as described illustrations. Only the external preview tabs change what the landing page shows. No trip loading/saving or AI requests are involved. The daily preview uses the actual DayMap with fixed catalog coordinates, selected Uffizi activity and no researched route geometry. OpenStreetMap tiles load in the browser, as in the real product. Photographs use the existing catalog Pexels URLs, so the image host and map tile host remain dependencies. Named places come from `data/italy.json`; schedules, costs, chat, preferences and files are examples. Do not substitute live workspace or provider components, which own network operations.
 
-Desktop has sticky section links and reading progress. Narrow layouts use a labelled section select. Architecture tabs use the shared Base UI keyboard behavior. Screenshots open through the shared dialog primitive with a close action, Escape dismissal and focus restoration. Chapter links and selection update the URL hash. Core narrative and native anchors remain server-rendered.
+Desktop sections alternate visual/text placement. Tablet and mobile layouts place copy before each visual. On mobile, discovery scales a mobile Start Page with the first example card, the day keeps its timeline and map, the budget uses a two-column table and Library stacks its files and document. Preview panels reserve space to prevent vertical jumps when switching. Keyboard arrows move tab focus; Enter activates the selected view. No automatic animation is introduced.
 
-The UI reuses the global page canvas and existing focus policy, with Georgia for reading and system sans for navigation. Screenshot dimensions reserve their correct aspect ratios. Source links cite the saved planning research; those studies inform the design and do not validate this product's travel outcomes. No booking, optimal-route, production-readiness or full evaluation-suite claims are made.
+## Captures and verification
 
-## Verification
+The rendered landing page no longer embeds screenshots. The previous `public/product-story/*.jpg` assets remain on disk but are not page dependencies. Existing photographer credits still apply to all catalog imagery.
 
-Local browser review at actual 1200px desktop and 390px mobile widths confirmed no horizontal overflow, loaded images, chapter/hash navigation, mobile selection, architecture mouse/keyboard interaction, screenshot enlargement and dismissal, and focus restoration. The credits route renders the existing attribution list. Final `npm run lint` and `npm run typecheck` passed. No backend changes, paid model calls or deployed verification are claimed. The detailed task record is retained locally.
-
-## Guide iteration narrative
-
-October 29, 2026: the guide section now explains how reviewed planning attempts and test results can become maintained rules, worked examples or specialised guides, retrieved in the relevant context and evaluated against motivating cases. This describes a developer-led improvement mechanism, not automatic learning or a guaranteed performance increase. The production scope paragraph also names account-free access as a deliberate choice while retaining the link's read/edit implications. Only explanatory copy changed. Follow-up verification is recorded in the locally retained guide-iteration task.
+The [product landing task](../tasks/main-about-demo/004-product-landing.md) records current checks. The focused render check covers the hero and all four feature visuals, including inert markup and absence of backend/map requests during rendering. Browser checks cover desktop/mobile layout, image loading, preview switching and the optional explanation. No paid model calls, real trip edits or deployed verification are claimed.

@@ -1,4 +1,4 @@
-import { handleTrip } from "@/services/trips";
+import { handleTrip } from "@/services/projects/trips";
 
 type Context = { params: Promise<{ reference: string }> };
 

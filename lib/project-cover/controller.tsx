@@ -7,7 +7,9 @@ import { CoverImages } from "./view";
 import "./cover.css";
 
 export function ProjectCover({ reference }: { reference: string }) {
-  const [cover, setCover] = useState<{ reference: string; photos: ProjectCoverPhoto[] } | null>(null);
+  const [cover, setCover] = useState<{ reference: string; photos: ProjectCoverPhoto[] } | null>(
+    null,
+  );
   useEffect(() => {
     let controller: AbortController | undefined;
     let disposed = false;
@@ -18,7 +20,8 @@ export function ProjectCover({ reference }: { reference: string }) {
       controller = request;
       try {
         const response = await fetch(`/api/trips/${encodeURIComponent(reference)}/preview`, {
-          cache: "no-store", signal: request.signal,
+          cache: "no-store",
+          signal: request.signal,
         });
         if (!response.ok) throw new Error("Cover unavailable");
         const data: { photos: ProjectCoverPhoto[] } = await response.json();
@@ -29,8 +32,14 @@ export function ProjectCover({ reference }: { reference: string }) {
     };
     void refresh();
     // Follow project changes.
-    const unsubscribe = subscribeTripChanges(reference, () => { void refresh(); });
-    return () => { disposed = true; controller?.abort(); unsubscribe(); };
+    const unsubscribe = subscribeTripChanges(reference, () => {
+      void refresh();
+    });
+    return () => {
+      disposed = true;
+      controller?.abort();
+      unsubscribe();
+    };
   }, [reference]);
   return <CoverImages photos={cover?.reference === reference ? cover.photos : []} />;
 }

@@ -1,0 +1,100 @@
+.project-recovery {
+  display: flex;
+  align-items: center;
+  width: 36px;
+  max-width: 100%;
+  min-width: 36px;
+  margin: 0;
+  border-radius: 9px;
+  background: transparent;
+}
+.project-recovery[data-expanded] {
+  width: 360px;
+  padding-left: 12px;
+  box-shadow: inset 0 0 0 1px #dedede;
+}
+.project-recovery input {
+  flex: 1;
+  width: 0;
+  min-width: 0;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  outline: none;
+  border-radius: 0;
+  background: transparent;
+  color: #222;
+  font-size: 14px;
+}
+.project-recovery input::placeholder {
+  color: #777;
+}
+.project-recovery-action {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #444;
+}
+.project-recovery .start-trip-action.project-recovery-key {
+  background: transparent;
+  color: #555;
+}
+.project-recovery-action:hover:not(:disabled),
+.project-recovery-action:focus-visible,
+.project-recovery .project-recovery-key:hover:not(:disabled),
+.project-recovery .project-recovery-key:focus-visible {
+  background: #ededed;
+  color: #222;
+}
+.project-recovery-action:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.project-recovery .project-recovery-key:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.project-recovery-spinner {
+  animation: recovery-spin 800ms linear infinite;
+}
+@keyframes recovery-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (max-width: 600px), (pointer: coarse) {
+  .project-recovery {
+    width: 44px;
+    min-width: 44px;
+  }
+  .project-recovery input {
+    height: 44px;
+    font-size: 16px;
+  }
+  .project-recovery-action {
+    width: 44px;
+    height: 44px;
+  }
+}
+@media (max-width: 600px) {
+  .start-trip-navigation:has(.project-recovery[data-expanded]) .start-trip-tab-list {
+    display: none;
+  }
+  .start-trip-navigation:has(.project-recovery[data-expanded]) {
+    min-height: 53px;
+  }
+  .project-recovery[data-expanded] {
+    width: 100%;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .project-recovery-spinner {
+    animation: none;
+  }
+}

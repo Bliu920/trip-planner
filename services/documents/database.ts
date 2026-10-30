@@ -8,7 +8,7 @@ export type StoredDocument = DocumentRef & {
   trip_reference: string; path: string; status: DocumentStatus; source: "chat" | "starter" | "library";
   kind: "upload" | "planning_context" | "research" | "working"; content_revision: number;
   original_name: string; revision: number; created_at: string; updated_at: string;
-  signed_until: string; cleanup_at: string | null;
+  signed_until: string;
 };
 const errors: Record<string, [string, number]> = {
   DOCUMENT_NOT_FOUND: ["This document could not be found in this trip.", 404],

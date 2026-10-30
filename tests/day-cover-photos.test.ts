@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { after, before, test } from "node:test";
 import { PGlite } from "@electric-sql/pglite";
-import { loadDayCoverPhotos } from "../services/catalog";
+import { loadDayCoverPhotos } from "../services/places/catalog";
 import { presentPlan } from "../lib/plan/presentation/model";
 import { examplePlan } from "./plan-fixture";
 import places from "../data/italy.json";

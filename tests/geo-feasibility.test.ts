@@ -5,11 +5,11 @@ import type { PGlite } from "@electric-sql/pglite";
 import { createDatabase, seed, databaseFetch, reference, otherTrip, conversation, generation } from "./chat-fixture";
 import { examplePlan, assumption, fixturePricedBudget } from "./plan-fixture";
 import { restaurantLocation } from "./restaurant-fixture";
-import { checkJourneys, inspectGeoSources, journeyFingerprint, handleJourneys } from "../services/feasibility";
-import { resolvePlace } from "../services/geo";
-import { matchPosition } from "../services/geo/matching";
+import { checkJourneys, inspectGeoSources, journeyFingerprint, handleJourneys } from "../services/places/feasibility";
+import { resolvePlace } from "../services/places/geo";
+import { matchPosition } from "../services/places/geo/matching";
 import { openSession } from "../services/workspace";
-import { beginTurn } from "../services/conversations";
+import { beginTurn } from "../services/assistant/conversation-store";
 import { getPlan, savePlan } from "../services/plans";
 import { places } from "../services/plans/catalog";
 import type { ActivityItem, Plan } from "../lib/plan";
@@ -130,8 +130,8 @@ test("evidence tables and RPCs are inaccessible to anonymous SQL", async () => {
   } finally { await db.exec("reset role"); }
 });
 
-test("researched hotels save through agent tools with geo evidence and survive a later manual edit", async () => {
-  const { agentTools } = await import("../services/agent/tools");
+test("low-level hotel proposals validate geo evidence and survive a later manual edit", async () => {
+  const { agentTools } = await import("../services/assistant/agent/tools");
   const position = (await resolvePlace(reference, { name: "Fixture Hotel", address: "Via Example 10", city: "Rome" }, signal()))!;
   const p = plan();
   p.items.stay = { id: "stay", kind: "stay", title: "Suggested Fixture Hotel", reason: "A researched lodging proposal, not a booking.", optional: false, keep: null, reservation: null,
@@ -186,4 +186,71 @@ test("a large proposal has a bounded provider-request budget without consuming i
   const before = routeCalls;
   await checkJourneys(reference, p, places, signal());
   assert.ok(routeCalls > before); assert.ok(routeCalls - before <= 24);
+});
+
+test("public semantic venue edits bind matched evidence and persist hotel and meal coordinates", async () => {
+  const { asSchema } = await import("ai");
+  const { agentTools } = await import("../services/assistant/agent/tools");
+  const turn = await beginTurn(reference, { conversationId: conversation, expectedLastId: null, retry: false, message: { id: "semantic-geo", text: "Plan three days with a researched hotel and restaurant" } }, generation);
+  const env = await openSession(reference, conversation, turn.responseId, generation, signal()), tools = agentTools(env) as import("ai").ToolSet;
+  async function call(name: keyof typeof tools, input: unknown) {
+    const tool = tools[name]!; const parsed = await asSchema<unknown>(tool.inputSchema).validate!(input);
+    assert.equal(parsed.success, true, JSON.stringify(parsed)); if (!parsed.success) throw new Error();
+    return await tool.execute!(parsed.value as never, { toolCallId: randomUUID(), messages: [], abortSignal: signal(), context: {} }) as import("../lib/actions").ActionResult;
+  }
+  const query = { name: "Fixture Hotel", address: "Via Example 10", city: "Rome" };
+  const lookup = await call("resolvePlace", query), evidence = lookup.data as import("../lib/journeys").GeoEvidence<import("../lib/journeys").Position>;
+  assert.equal(evidence.payload.status, "matched");
+  const sources = env.recordWebSources!(["https://example.com/hotel", "https://example.com/test-rate"])!;
+  const hotel = { ...query, sourceId: sources[0].sourceId, geoEvidenceId: evidence.id };
+  await call("createPlan", { plan: { startDate: null, days: [1, 2, 3].map(i => ({ id: `day-${i}`, title: "Rome" })) } });
+  for (const invalid of [{ ...hotel, geoEvidenceId: randomUUID() }, { ...hotel, address: "Via Example 11" }]) {
+    const refused = await call("editPlan", { operations: [{ type: "addStay", id: "hotel", hotel: invalid, afterDayIds: ["day-1", "day-2"] }] });
+    assert.notEqual(refused.outcome, "succeeded");
+    assert.equal((env.artifacts!.readPlan({ view: "effective", selector: "full", ids: [] }) as { plan: Plan }).plan.items.hotel, undefined);
+  }
+  const result = await call("editPlan", { operations: [
+    ...[1, 2, 3].map(i => ({ type: "addActivity", id: `visit-${i}`, dayId: `day-${i}`, kind: "visit", title: "Colosseum", placeId: places[0].id, startTime: "09:00", durationMinutes: 90 })),
+    { type: "addStay", id: "hotel", hotel, afterDayIds: ["day-1", "day-2"] },
+    { type: "addActivity", id: "meal", dayId: "day-1", kind: "meal", title: "Lunch at Fixture Hotel restaurant", venue: { name: query.name, address: query.address, city: query.city, sourceId: sources[0].sourceId }, startTime: "14:00", durationMinutes: 60 },
+  ] });
+  assert.equal(result.effect, "staged", JSON.stringify(result));
+  const draft = (env.artifacts!.readPlan({ view: "effective", selector: "full", ids: [] }) as { plan: Plan }).plan;
+  for (const id of ["hotel", "meal"]) {
+    const item = draft.items[id]; assert.notEqual(item.kind, "travel"); if (item.kind === "travel") throw new Error();
+    assert.equal(item.location?.type === "hotel" || item.location?.type === "restaurant", true);
+    assert.equal((item.location as { geoEvidenceId: string }).geoEvidenceId, evidence.id);
+    assert.equal((item.location as { longitude: number }).longitude, 12.5);
+    assert.equal((item.location as { latitude: number }).latitude, 41.9);
+  }
+  assert.equal(positionCalls, 1, "implicit exact-cache binding does not repeat the provider lookup");
+  await env.proposeBudget!(fixturePricedBudget(), true);
+  assert.equal((await call("commit", { summary: "Saved mapped venues", handledInputIds: [] })).effect, "persisted");
+  const saved = await getPlan(reference); assert.deepEqual(saved.plan!.items.hotel, draft.items.hotel); assert.deepEqual(saved.plan!.items.meal, draft.items.meal);
+  const updated = structuredClone(saved.plan!); updated.days[0].title = "Same mapped places";
+  assert.deepEqual((await savePlan(reference, saved.revision, updated, randomUUID())).snapshot.plan!.items.hotel, draft.items.hotel);
+});
+
+test("position binding rejects foreign, stale and changed venue references", async () => {
+  const { readVenuePosition } = await import("../services/places/geo");
+  const query = { name: "Fixture Hotel", address: "Via Example 10", city: "Rome" };
+  const evidence = (await resolvePlace(reference, query, signal()))!;
+  for (const changed of [{ ...query, name: "Another branch" }, { ...query, address: "Via Example 11" }, { ...query, city: "Naples" }])
+    await assert.rejects(readVenuePosition(reference, changed, evidence.id, signal()), /does not match/);
+  await assert.rejects(readVenuePosition(otherTrip, query, evidence.id, signal()), /missing/);
+  await assert.rejects(readVenuePosition(reference, query, randomUUID(), signal()), /missing/);
+  await db.query("update geo_evidence set expires_at=now()-interval '1 second' where id=$1", [evidence.id]);
+  await assert.rejects(readVenuePosition(reference, query, evidence.id, signal()), /expired/);
+  assert.equal(await readVenuePosition(reference, query, undefined, signal()), null);
+});
+
+test("new lookup policy retries old negative caches while preserving fresh matched positions", async () => {
+  const { cacheKey, normalize } = await import("../services/places/geo");
+  const { saveEvidence } = await import("../services/places/geo/store");
+  const query = { name: "Fixture Hotel", address: "Via Example 10", city: "Rome" };
+  const key = cacheKey(["position-v1", normalize(query.name), normalize(query.address), normalize(query.city)]);
+  const previous = await saveEvidence(reference, key, "position", matchPosition(query, positionResponse()), signal());
+  assert.equal((await resolvePlace(reference, query, signal(), false))!.id, previous.id); assert.equal(positionCalls, 0);
+  await saveEvidence(otherTrip, key, "position", { ...matchPosition(query, positionResponse()), status: "not_found", coordinates: null }, signal());
+  assert.equal((await resolvePlace(otherTrip, query, signal()))!.payload.status, "matched"); assert.equal(positionCalls, 1);
 });

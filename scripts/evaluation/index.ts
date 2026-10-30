@@ -4,8 +4,8 @@ import { join } from "node:path";
 import { loadCases, gradeChecks, executionIssue } from "@/services/evaluation";
 import { executeCase } from "@/services/evaluation/runner";
 import { judgeCase, judgeModel } from "@/services/evaluation/judge";
-import { agentModel } from "@/services/agent";
-import { providerDiagnostics } from "@/services/chat/provider";
+import { agentModel } from "@/services/assistant/agent";
+import { providerDiagnostics } from "@/services/assistant/agent/diagnostics";
 import type { Check, Verdict } from "@/services/evaluation";
 
 const dbPath = "data/evaluation/cases.json";
@@ -14,7 +14,7 @@ const value = (name: string) => { const i = args.indexOf(name); return i < 0 ? n
 const known = new Set(["run", "validate", "--all", "--ids", "--judge", "--no-judge", "--pace-ms"]);
 const validArgs = () => args.every((arg, i) => known.has(arg) || (i > 0 && ["--ids", "--pace-ms"].includes(args[i - 1])));
 async function fingerprint() {
-  const directories = ["services/agent", "services/chat", "services/workspace", "services/budgets", "services/plans", "services/documents", "services/guides", "services/geo", "services/feasibility", "services/evaluation", "scripts/evaluation", "tests/fixtures/plan", "lib/plan", "lib/budget", "lib/catalog", "lib/journeys", "supabase/migrations"];
+  const directories = ["services/assistant", "services/workspace", "services/budgets", "services/plans", "services/documents", "services/places/geo", "services/places/feasibility", "services/evaluation", "scripts/evaluation", "tests/fixtures/plan", "lib/plan", "lib/budget", "lib/catalog", "lib/journeys", "supabase/migrations"];
   const walk = async (dir: string): Promise<string[]> => {
     const entries = await readdir(dir, { withFileTypes: true });
     const names = await Promise.all(entries.map(entry => entry.isDirectory() ? walk(join(dir, entry.name)) : [join(dir, entry.name)]));
@@ -60,7 +60,10 @@ async function main() {
   await mkdir(dir, { recursive: true, mode: 0o700 });
   const report = { version: 1, startedAt: new Date().toISOString(), caseHash: data.hash, appHash: await fingerprint(), geoConfigured: !!process.env.HEIGIT_API_KEY, paceMs,
     agentModel: agentModel(), judgeModel: useJudge ? judgeModel() : null,
+    selectedCaseIds: cases.map(c => c.id),
     results: [] as { id: string; outcome: string; checks: Check[]; judge: Verdict | null; error: string | null; elapsedMs: number | null; providerRequests: number | null; simulatedRequests: number | null; sourceChanged?: boolean }[] };
+  await writeFile(join(dir, "cases.json"), JSON.stringify(cases, null, 2), { mode: 0o600 });
+  await writeFile(join(dir, "report.json"), JSON.stringify(report, null, 2), { mode: 0o600 });
   // Run isolated cases sequentially.
   for (const c of cases) {
     console.log(`${c.id}: started (${1 + (c.followUps?.length ?? 0)} turns)`);
@@ -86,6 +89,10 @@ async function main() {
       console.log(`${c.id}: not_evaluable`);
     }
     await writeFile(join(dir, "report.json"), JSON.stringify(report, null, 2), { mode: 0o600 });
+    if (report.results.at(-1)?.sourceChanged) {
+      console.log("Application source changed. Stopped before starting another paid case.");
+      break;
+    }
   }
   const counts = ["pass", "fail", "not_evaluable"].map(s => `${s}: ${report.results.filter(r => r.outcome === s).length}`).join(", ");
   await writeFile(join(dir, "report.md"), `# Evaluation report\n\n${counts}\n\n${report.results.map(r => `- ${r.id}: ${r.outcome}`).join("\n")}\n`, { mode: 0o600 });

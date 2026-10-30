@@ -8,10 +8,7 @@ const date = z
   .regex(/^\d{4}-\d{2}-\d{2}$/)
   .refine((value) => {
     const parsed = new Date(`${value}T12:00:00Z`);
-    return (
-      Number.isFinite(parsed.getTime()) &&
-      parsed.toISOString().slice(0, 10) === value
-    );
+    return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
   }, "Use a real calendar date.");
 const clock = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
 export const sourceSchema = z.discriminatedUnion("type", [
@@ -84,14 +81,32 @@ export const locationSchema = z.discriminatedUnion("type", [
     basis,
   }),
   z.strictObject({ type: z.literal("area"), label: text, basis }),
-  ...(["restaurant", "hotel"] as const).map(type => z.strictObject({
-    type: z.literal(type), label: text, address: text, city: text,
-    geoEvidenceId: z.uuid().nullable().optional(),
-    latitude: z.number().min(-90).max(90).nullable(),
-    longitude: z.number().min(-180).max(180).nullable(),
-    basis: basis.refine(b => b.kind === "research" && b.sources.some(s => s.type === "web"), "A researched venue needs a web source."),
-  }).refine(l => (l.latitude === null) === (l.longitude === null), "Supply both coordinates or leave both unknown.")
-    .refine(l => !l.geoEvidenceId || l.basis.sources.some(s => s.type === "geo" && s.evidenceId === l.geoEvidenceId), "Include the positioning evidence reference.")),
+  ...(["restaurant", "hotel"] as const).map((type) =>
+    z
+      .strictObject({
+        type: z.literal(type),
+        label: text,
+        address: text,
+        city: text,
+        geoEvidenceId: z.uuid().nullable().optional(),
+        latitude: z.number().min(-90).max(90).nullable(),
+        longitude: z.number().min(-180).max(180).nullable(),
+        basis: basis.refine(
+          (b) => b.kind === "research" && b.sources.some((s) => s.type === "web"),
+          "A researched venue needs a web source.",
+        ),
+      })
+      .refine(
+        (l) => (l.latitude === null) === (l.longitude === null),
+        "Supply both coordinates or leave both unknown.",
+      )
+      .refine(
+        (l) =>
+          !l.geoEvidenceId ||
+          l.basis.sources.some((s) => s.type === "geo" && s.evidenceId === l.geoEvidenceId),
+        "Include the positioning evidence reference.",
+      ),
+  ),
 ]);
 const point = z
   .strictObject({
@@ -119,10 +134,7 @@ const timing = z
     end: point.nullable(),
     duration: duration.nullable(),
   })
-  .refine(
-    (t) => !(t.start && t.end && t.duration),
-    "Derive duration from two endpoints.",
-  );
+  .refine((t) => !(t.start && t.end && t.duration), "Derive duration from two endpoints.");
 const common = {
   id,
   title: z.string().trim().min(1).max(160),
@@ -148,9 +160,7 @@ export const itemSchema = z.union([
     kind: z.literal("travel"),
     from: locationSchema.nullable(),
     to: locationSchema.nullable(),
-    mode: z
-      .enum(["walk", "transit", "train", "car", "flight", "other"])
-      .nullable(),
+    mode: z.enum(["walk", "transit", "train", "car", "flight", "other"]).nullable(),
     timing: z.discriminatedUnion("type", [
       z.strictObject({ type: z.literal("interval"), schedule: timing }),
       z.strictObject({ type: z.literal("arrival"), at: point }),
@@ -185,17 +195,17 @@ export const daySchema = z.strictObject({
   endLocation: locationSchema.nullable(),
 });
 export const noteSchema = z.strictObject({
-  id, kind: z.enum(["assumption", "uncertainty", "conflict", "action"]),
-  text, relatedItemIds: z.array(id).max(20), sources: z.array(sourceSchema).max(12),
+  id,
+  kind: z.enum(["assumption", "uncertainty", "conflict", "action"]),
+  text,
+  relatedItemIds: z.array(id).max(20),
+  sources: z.array(sourceSchema).max(12),
 });
 export const planSchema: z.ZodType<Plan> = z.strictObject({
   startDate: dateChoiceSchema.nullable(),
   days: z.tuple([daySchema, daySchema, daySchema]),
   items: z
     .record(id, itemSchema)
-    .refine(
-      (v) => Object.keys(v).length <= 100,
-      "Use no more than 100 arrangements.",
-    ),
+    .refine((v) => Object.keys(v).length <= 100, "Use no more than 100 arrangements."),
   notes: z.array(noteSchema).max(40),
 });

@@ -29,7 +29,26 @@ export function ExploreLoader({ actionTarget }: { actionTarget?: HTMLElement | n
 
   // Isolate catalog failures.
   if (places) return <Explore places={places} embedded actionTarget={actionTarget} />;
-  return <div className="explore-load-state">
-    {error ? <><p role="alert">Could not load places.</p><Button variant="plain" type="button" className="cursor-pointer" onClick={() => { setError(false); setAttempt(value => value + 1); }}>Try again</Button></> : <p role="status">Loading places...</p>}
-  </div>;
+  return (
+    <div className="explore-load-state">
+      {error ? (
+        <>
+          <p role="alert">Could not load places.</p>
+          <Button
+            variant="plain"
+            type="button"
+            className="cursor-pointer"
+            onClick={() => {
+              setError(false);
+              setAttempt((value) => value + 1);
+            }}
+          >
+            Try again
+          </Button>
+        </>
+      ) : (
+        <p role="status">Loading places...</p>
+      )}
+    </div>
+  );
 }

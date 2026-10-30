@@ -4,11 +4,11 @@ Implemented October 27, 2026. The supplied Italy dataset remains the source of p
 
 ## Ownership and entry points
 
-`services/catalog/index.ts` owns `getPlaces`, `loadCatalog` and exact-ID `readPlaces`. The configured SQL catalog is validated against the 103 source IDs. Without configured storage, or before the catalog migration, the existing bundled preview remains available. Unexpected SQL failures are surfaced, not disguised as an empty result.
+`services/places/catalog/index.ts` owns `getPlaces`, `loadCatalog` and exact-ID `readPlaces`. The configured SQL catalog is validated against the 103 source IDs. Without configured storage, or before the catalog migration, the existing bundled preview remains available. Unexpected SQL failures are surfaced, not disguised as an empty result.
 
 `lib/catalog/index.ts` exposes the pure `CatalogQuery`, schema, `queryCatalog` and `describeCatalog` contracts. `query.ts` owns filtering, pagination and discovery. Explore's existing `filterPlaces` is a thin adapter using the same query implementation. Its existing query/city/type controls and full-catalog API response are unchanged. The agent can use more filters without adding every filter to the UI.
 
-`services/agent/tools.ts` adapts `describeCatalog`, `searchPlaces` and `readPlaces` to the tool interface. `services/workspace/session.ts` loads the same server catalog as Explore and caches it for the run. Tool search strips photo metadata. Plan validation continues to use the immutable supplied records through the existing plans export, which now delegates to the catalog source owner.
+`services/assistant/agent/tools/index.ts` adapts `describeCatalog`, `searchPlaces` and `readPlaces` to the tool interface. `services/workspace/session.ts` loads the same server catalog as Explore and caches it for the run. Tool search strips photo metadata. Plan validation continues to use the immutable supplied records through the existing plans export, which now delegates to the catalog source owner.
 
 ## Query contract
 

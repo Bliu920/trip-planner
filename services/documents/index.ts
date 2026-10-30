@@ -1,11 +1,10 @@
 // Maintenance guide: docs/modules/library.md.
 import "server-only";
 import { fileRenameError, fileFormat } from "@/lib/file-types";
-import { timingSafeEqual } from "node:crypto";
 import { nameError, type DocumentSummary } from "@/lib/documents/types";
-import { getTrip, TripError } from "@/services/trips";
+import { getTrip, TripError } from "@/services/projects/trips";
 import { checkDocumentOrigin, documentId, documentRpc, DocumentError, getDocument, publicDocument } from "./database";
-import { cleanupDocuments, deleteDocument, finalizeDocument, readDocumentContent, reserveDocument } from "./lifecycle";
+import { deleteDocument, finalizeDocument, readDocumentContent, reserveDocument } from "./lifecycle";
 
 export { DocumentError, getDocument } from "./database";
 export { readDocumentContent } from "./lifecycle";
@@ -94,20 +93,6 @@ export async function handleLegacyAttachments(request: Request, reference: strin
     throw new DocumentError("This document action is not supported.", 405);
   } catch (error) { return failure(error); }
 }
-export async function handleCleanup(request: Request) {
-  try {
-    // Authenticate maintenance access.
-    const secret = process.env.DOCUMENT_CLEANUP_SECRET;
-    if (!secret || secret.length < 32) throw new DocumentError("Document cleanup is not configured.", 503);
-    const supplied = Buffer.from(request.headers.get("authorization") ?? "");
-    const expected = Buffer.from(`Bearer ${secret}`);
-    if (supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) throw new DocumentError("Unauthorized.", 401);
-    if (request.method !== "POST") throw new DocumentError("Use POST for document cleanup.", 405);
-    const result = await cleanupDocuments();
-    return Response.json(result, { status: result.failed ? 503 : 200, headers });
-  } catch (error) { return failure(error); }
-}
-
 // Expose editable documents.
 export { validateDocumentEdit, prepareDocument, publishDocument, readTextDocument, handleDocumentText } from "./text";
 export type { PreparedDocument } from "./text";

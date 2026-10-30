@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import type { Place, PlacePhoto } from "../../lib/catalog";
-import { photoManifestSchema } from "../../services/catalog/validation";
+import { photoManifestSchema } from "../../services/places/catalog/validation";
 
 function credentials() {
   const base = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;

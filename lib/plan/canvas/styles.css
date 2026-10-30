@@ -1,54 +1,306 @@
 /* Forms extend the original presentation. */
-.pv2-icon { display:inline-flex; align-items:center; justify-content:center; width:30px; height:30px; border:0; border-radius:5px; background:transparent; color:#56725f; flex-shrink:0; }
-.pv2-icon:hover:not(:disabled),.pv2-button:hover:not(:disabled) { background:#e8f0eb; }
-.pv2-actions { display:flex; gap:8px; margin-top:14px; flex-wrap:wrap; }
-.pv2-primary,.pv2-button,.pv2-danger { display:inline-flex; align-items:center; justify-content:center; gap:5px; border:0; padding:9px 12px; border-radius:6px; font-size:13px; }
-.pv2-primary { color:white; background:#16734b; }
-.pv2-button { color:#365e47; background:#eef4ef; }
-.pv2-danger { color:white; background:#a53c2e; }
-.pv2-fields { padding:4px 0 12px; }
-.pv2-fields fieldset { border:0; margin:0; padding:0; min-width:0; }
-.pv2-fields label { margin:10px 0; font-size:12px; }
-.pv2 input,.pv2 textarea,.pv2 select,.pv2-dialog input,.pv2-dialog select { font:inherit; }
-.pv2-fields input,.pv2-fields textarea,.pv2-fields select,.pv2-title-form input { border:1px solid #a8c4b2; border-radius:5px; padding:8px; background:white; width:100%; margin-top:4px; font-size:13px; color:#20382d; }
-.pv2-field-row { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
-.pv2-fields .pv2-checkbox { display:flex; align-items:center; gap:8px; }
-.pv2-checkbox input { width:16px; height:16px; margin:0; accent-color:#16734b; }
-.pv2-evidence { font-size:12px; color:#5d7365; margin:12px 0; }
-.pv2-evidence summary { margin-bottom:9px; }
-.pv2-warning { font-size:12px; color:#87541e; background:#fcf5e8; padding:10px; border-radius:5px; }
-.pv2-muted { color:#697c70; }
-.pv2-fine { font-size:12px; }
-.pv2-dialog { width:min(560px,calc(100% - 32px)); max-height:85dvh; overflow:auto; border:1px solid #dfe7e1; border-radius:14px; padding:24px; background:white; color:#20382d; box-shadow:0 20px 90px #163d2930; }
-.pv2-dialog-head { display:flex; justify-content:space-between; align-items:center; gap:16px; margin-bottom:12px; }
-.pv2-dialog h2 { margin:0; font-size:22px; }
-.pv2-search { display:flex; gap:8px; align-items:center; margin:20px 0 10px; }
-.pv2-search input { flex:1; }
-.pv2-search select { max-width:125px; border:1px solid #c7d4cc; border-radius:5px; padding:9px; }
-.pv2-break { display:flex; gap:8px; align-items:center; padding:12px; color:#16734b; background:#eff6f1; border:0; border-radius:7px; width:100%; }
-.pv2-results { list-style:none; padding:0; max-height:330px; overflow:auto; margin:12px 0; }
-.pv2-results li { display:flex; align-items:center; justify-content:space-between; gap:12px; border-bottom:1px solid #e7eee8; padding:14px 3px; }
-.pv2-results strong { font-size:14px; font-weight:550; }
-.pv2-results span { display:block; font-size:12px; color:#6c7f72; margin-top:3px; }
-.pv2-more-actions { margin-top:18px; padding-top:14px; border-top:1px solid #dfe7e1; font-size:12px; }
-.pv2-more-actions summary { color:#61766a; padding:5px 0; }
-.pv2-more-actions > p { margin:10px 0 0; }
-.pv2-fields .pv2-placement { display:flex; gap:12px; align-items:center; margin:12px 0 4px; }
-.pv2-fields .pv2-placement select { flex:1; margin:0; min-width:0; }
-.pv2-reorder { display:flex; flex-wrap:wrap; gap:14px; margin:6px 0; }
-.pv2-text-action { border:0; background:none; padding:8px 0; color:#365e47; text-align:left; font-size:12px; }
-.pv2-text-action:hover:not(:disabled) { text-decoration:underline; text-underline-offset:3px; }
-.pv2-text-action.pv2-remove-action { color:#a53c2e; margin-top:6px; }
+.pv2-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: #56725f;
+  flex-shrink: 0;
+}
+.pv2-icon:hover:not(:disabled),
+.pv2-button:hover:not(:disabled) {
+  background: #e8f0eb;
+}
+.pv2-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+  flex-wrap: wrap;
+}
+.pv2-primary,
+.pv2-button,
+.pv2-danger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border: 0;
+  padding: 9px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+.pv2-primary {
+  color: white;
+  background: #16734b;
+}
+.pv2-button {
+  color: #365e47;
+  background: #eef4ef;
+}
+.pv2-danger {
+  color: white;
+  background: #a53c2e;
+}
+.pv2-fields {
+  padding: 4px 0 12px;
+}
+.pv2-fields fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+.pv2-fields label {
+  margin: 10px 0;
+  font-size: 12px;
+}
+.pv2 input,
+.pv2 textarea,
+.pv2 [data-slot="select-trigger"],
+.pv2-dialog input,
+.pv2-dialog [data-slot="select-trigger"] {
+  font: inherit;
+}
+.pv2-fields input,
+.pv2-fields textarea,
+.pv2-fields [data-slot="select-trigger"],
+.pv2-title-form input {
+  border: 1px solid #a8c4b2;
+  border-radius: 5px;
+  padding: 8px;
+  background: white;
+  width: 100%;
+  margin-top: 4px;
+  font-size: 13px;
+  color: #20382d;
+}
+.pv2-field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.pv2-fields .pv2-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.pv2-checkbox input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: #16734b;
+}
+.pv2-evidence {
+  font-size: 12px;
+  color: #5d7365;
+  margin: 12px 0;
+}
+.pv2-evidence summary {
+  margin-bottom: 9px;
+}
+.pv2-warning {
+  font-size: 12px;
+  color: #87541e;
+  background: #fcf5e8;
+  padding: 10px;
+  border-radius: 5px;
+}
+.pv2-muted {
+  color: #697c70;
+}
+.pv2-fine {
+  font-size: 12px;
+}
+.pv2-dialog {
+  width: min(560px, calc(100% - 32px));
+  max-height: 85dvh;
+  overflow: auto;
+  border: 1px solid #dfe7e1;
+  border-radius: 14px;
+  padding: 24px;
+  background: white;
+  color: #20382d;
+  box-shadow: 0 20px 90px #163d2930;
+}
+.pv2-dialog-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+.pv2-dialog h2 {
+  margin: 0;
+  font-size: 22px;
+}
+.pv2-search {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 20px 0 10px;
+}
+.pv2-search input {
+  flex: 1;
+}
+.pv2-search [data-slot="select-trigger"] {
+  max-width: 125px;
+  border: 1px solid #c7d4cc;
+  border-radius: 5px;
+  padding: 9px;
+}
+.pv2-break {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 12px;
+  color: #16734b;
+  background: #eff6f1;
+  border: 0;
+  border-radius: 7px;
+  width: 100%;
+}
+.pv2-results {
+  list-style: none;
+  padding: 0;
+  max-height: 330px;
+  overflow: auto;
+  margin: 12px 0;
+}
+.pv2-results li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid #e7eee8;
+  padding: 14px 3px;
+}
+.pv2-results strong {
+  font-size: 14px;
+  font-weight: 550;
+}
+.pv2-results span {
+  display: block;
+  font-size: 12px;
+  color: #6c7f72;
+  margin-top: 3px;
+}
+.pv2-more-actions {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid #dfe7e1;
+  font-size: 12px;
+}
+.pv2-more-actions summary {
+  color: #61766a;
+  padding: 5px 0;
+}
+.pv2-more-actions > p {
+  margin: 10px 0 0;
+}
+.pv2-fields .pv2-placement {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin: 12px 0 4px;
+}
+.pv2-fields .pv2-placement [data-slot="select-trigger"] {
+  flex: 1;
+  margin: 0;
+  min-width: 0;
+}
+.pv2-reorder {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin: 6px 0;
+}
+.pv2-text-action {
+  border: 0;
+  background: none;
+  padding: 8px 0;
+  color: #365e47;
+  text-align: left;
+  font-size: 12px;
+}
+.pv2-text-action:hover:not(:disabled) {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.pv2-text-action.pv2-remove-action {
+  color: #a53c2e;
+  margin-top: 6px;
+}
 
-.pv2 { color:#203c32; font-family:"Avenir Next","Segoe UI",sans-serif; }
-.pv2 .pp-stop:focus-visible { background:#eff5ee; }
-.pv2 .pp-stop:disabled { opacity:1; cursor:default; }
-.pv2-itemEditor { position:relative; margin:0 4px 16px calc(var(--pp-event-pad, 4px) + var(--pp-time-width, 40px) + var(--pp-event-gap, 10px)); padding:0 10px 6px; background:#f7f9f5; border-radius:6px; }
-.pv2-title-form { margin:0 17px 16px; padding:12px; background:#f7f9f5; border-radius:6px; }
-.pv2-title-form label { margin:0; font-size:12px; }
-.pv2-add { display:flex; align-items:center; gap:6px; padding:9px 17px; margin:0 0 7px; border:0; background:none; color:#65745f; font-size:12px; text-align:left; }
-.pv2-add:hover:not(:disabled) { color:#175b43; text-decoration:underline; text-underline-offset:3px; }
-@container plan-presentation (max-width:440px) { .pv2-field-row { grid-template-columns:1fr; gap:0; } .pv2-itemEditor { margin-left:4px; } }
-@media (pointer:coarse) { .pv2-text-action,.pv2-more-actions summary,.pv2-add { min-height:44px; } }
+.pv2 {
+  color: #203c32;
+  font-family: "Avenir Next", "Segoe UI", sans-serif;
+}
+.pv2 .pp-stop:focus-visible {
+  background: #eff5ee;
+}
+.pv2 .pp-stop:disabled {
+  opacity: 1;
+  cursor: default;
+}
+.pv2-itemEditor {
+  position: relative;
+  margin: 0 4px 16px
+    calc(var(--pp-event-pad, 4px) + var(--pp-time-width, 40px) + var(--pp-event-gap, 10px));
+  padding: 0 10px 6px;
+  background: #f7f9f5;
+  border-radius: 6px;
+}
+.pv2-title-form {
+  margin: 0 17px 16px;
+  padding: 12px;
+  background: #f7f9f5;
+  border-radius: 6px;
+}
+.pv2-title-form label {
+  margin: 0;
+  font-size: 12px;
+}
+.pv2-add {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 17px;
+  margin: 0 0 7px;
+  border: 0;
+  background: none;
+  color: #65745f;
+  font-size: 12px;
+  text-align: left;
+}
+.pv2-add:hover:not(:disabled) {
+  color: #175b43;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+@container plan-presentation (max-width:440px) {
+  .pv2-field-row {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+  .pv2-itemEditor {
+    margin-left: 4px;
+  }
+}
+@media (pointer: coarse) {
+  .pv2-text-action,
+  .pv2-more-actions summary,
+  .pv2-add {
+    min-height: 44px;
+  }
+}
 
-.pv2-dialog .pv2-itemEditor,.pv2-dialog .pv2-title-form { margin:0; padding:0; background:none; }
+.pv2-dialog .pv2-itemEditor,
+.pv2-dialog .pv2-title-form {
+  margin: 0;
+  padding: 0;
+  background: none;
+}

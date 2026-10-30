@@ -1,5 +1,5 @@
 import { after } from "next/server";
-import { handleChat } from "@/services/chat";
+import { handleChat } from "@/services/assistant";
 
 export const maxDuration = 600;
 

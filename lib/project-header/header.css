@@ -1,31 +1,142 @@
-.project-header { display: flex; align-items: center; gap: 14px; height: 64px; flex-shrink: 0; padding: 12px; }
-.project-back { display: flex; align-items: center; gap: 9px; color: #666; font-size: 13px; flex-shrink: 0; }
-.project-back:hover { color: #222; }
-.project-divider { color: #d2d2d2; }
-.project-content-toggle { flex-shrink: 0; background: transparent; color: #343b34; }
-.project-content-toggle:hover, .project-content-toggle:focus-visible { background: transparent; color: #007a3d; }
-.project-header h1 { flex: 1 1 0; min-width: 0; margin: 0; font-size: 14px; font-weight: 500; }
-.project-name { display: flex; align-items: center; max-width: 100%; min-height: 36px; padding: 4px 6px; margin-left: -6px; border-radius: 7px; text-align: left; }
-.project-name > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.project-name:hover, .project-name:focus-visible { background: #eaeae5; }
-.project-copy { margin-left: auto; flex-shrink: 0; width: 96px; font-size: 12px; }
-.project-dialog { width: min(420px, calc(100vw - 32px)); padding: 24px; }
-.project-name-form { display: grid; gap: 10px; margin-top: 20px; }
-.project-name-form label { font-size: 13px; }
-.project-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
-.project-save { background: #007a3d; color: #fff; }
-.project-save:hover:not(:disabled) { background: #006632; }
-.project-error { margin: 0; font-size: 13px; color: #81362e; overflow-wrap: anywhere; }
-.project-dialog .project-id { margin-top: 18px; font-size: 12px; }
+.project-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  height: 64px;
+  flex-shrink: 0;
+  padding: 12px;
+}
+.project-back {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: #666;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+.project-back:hover {
+  color: #222;
+}
+.project-divider {
+  color: #d2d2d2;
+}
+.project-content-toggle {
+  flex-shrink: 0;
+  background: transparent;
+  color: #343b34;
+}
+.project-content-toggle:hover,
+.project-content-toggle:focus-visible {
+  background: transparent;
+  color: #007a3d;
+}
+.project-header h1 {
+  flex: 1 1 0;
+  min-width: 0;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+}
+.project-name {
+  display: flex;
+  align-items: center;
+  max-width: 100%;
+  min-height: 36px;
+  padding: 4px 6px;
+  margin-left: -6px;
+  border-radius: 7px;
+  text-align: left;
+}
+.project-name > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.project-name:hover,
+.project-name:focus-visible {
+  background: #eaeae5;
+}
+.project-copy {
+  margin-left: auto;
+  flex-shrink: 0;
+  width: 96px;
+  font-size: 12px;
+}
+.project-dialog {
+  width: min(420px, calc(100vw - 32px));
+  padding: 24px;
+}
+.project-name-form {
+  display: grid;
+  gap: 10px;
+  margin-top: 20px;
+}
+.project-name-form label {
+  font-size: 13px;
+}
+.project-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+}
+.project-save {
+  background: #007a3d;
+  color: #fff;
+}
+.project-save:hover:not(:disabled) {
+  background: #006632;
+}
+.project-error {
+  margin: 0;
+  font-size: 13px;
+  color: #81362e;
+  overflow-wrap: anywhere;
+}
+.project-dialog .project-id {
+  margin-top: 18px;
+  font-size: 12px;
+}
 @media (max-width: 760px) {
-  .project-header { height: 56px; padding: 6px; gap: 6px; }
-  .project-back > span, .project-divider { display: none; }
-  .project-back, .project-name, .project-copy { min-height: 44px; }
-  .project-content-toggle { min-width: 44px; min-height: 44px; }
-  .project-back { justify-content: center; min-width: 32px; }
-  .project-dialog-actions > button { min-height: 44px; }
+  .project-header {
+    height: 56px;
+    padding: 6px;
+    gap: 6px;
+  }
+  .project-back > span,
+  .project-divider {
+    display: none;
+  }
+  .project-back,
+  .project-name,
+  .project-copy {
+    min-height: 44px;
+  }
+  .project-content-toggle {
+    min-width: 44px;
+    min-height: 44px;
+  }
+  .project-back {
+    justify-content: center;
+    min-width: 32px;
+  }
+  .project-dialog-actions > button {
+    min-height: 44px;
+  }
 }
 @media (max-width: 480px) {
-  .project-copy { width: 44px; }
-  .project-copy > span { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+  .project-copy {
+    width: 44px;
+  }
+  .project-copy > span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
 }

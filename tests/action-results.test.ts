@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { z } from "zod";
-import { ActionRun, actionTool, succeeded, blocked } from "../services/agent/actions";
+import { ActionRun, actionTool, succeeded, blocked } from "../services/assistant/agent/actions";
 import { actionResultSchema, actionStateLabel, type ActionState } from "../lib/actions";
 import { WorkspaceError } from "../services/workspace/database";
 

@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 // Render client components safely.
 const require = createRequire(import.meta.url);
 require.extensions[".css"] = () => {};
-const { DocumentInlineDetail } = require("../lib/documents/controls") as typeof import("../lib/documents/controls");
+const { DocumentInlineDetail } = require("../lib/documents/detail") as typeof import("../lib/documents/detail");
 const html = renderToStaticMarkup(<DocumentInlineDetail reference="trip" id="file" onClose={() => {}} />);
 assert.match(html, /aria-label="Back to Library"/);
 assert.match(html, /Loading document/);

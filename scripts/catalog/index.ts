@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { placeSchema, photoManifestSchema } from "../../services/catalog/validation";
+import { placeSchema, photoManifestSchema } from "../../services/places/catalog/validation";
 import { checkImages, syncCatalog, syncPhotos, verifyCatalog } from "./sync";
 
 async function main() {

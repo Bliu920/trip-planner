@@ -1,8 +1,24 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { replyFailureMessage, replyFailureText, type ReplyFailureCode } from "../lib/chat/failure";
-import { failureCode } from "../services/chat/provider";
+import { failureCode } from "../services/assistant/agent/diagnostics";
 import type { ChatMessage } from "../lib/chat/types";
+import { actionStateLabel } from "../lib/actions";
+
+test("current empty-budget blocker outranks a corrected historic input error on reload", () => {
+  const state = { state: "unsaved" as const, operationId: "test", code: "WORKSPACE_ERROR", revision: null,
+    message: "The first itinerary needs a budget with cost entries. Initialize a Budget if absent, then add researched costs with editBudget." };
+  const message: ChatMessage = { id: "b004", role: "assistant", parts: [
+    { type: "data-action", data: state },
+    { type: "data-failure", data: { code: "incomplete", steps: 29, elapsedMs: 208250, finishReason: "error",
+      inputFailure: { kind: "tool_input", errorType: "AI_InvalidToolInputError", toolName: "editPlan" } } },
+  ] };
+  assert.match(replyFailureMessage(message), /before adding costs/);
+  assert.doesNotMatch(replyFailureMessage(message), /correct some details|editBudget|WORKSPACE_ERROR/);
+  assert.match(actionStateLabel(state), /estimate has no costs/);
+  assert.match(replyFailureText("timeout", { blocker: "budget_empty" }), /ran out of time/);
+  assert.match(replyFailureText("provider_limit", { blocker: "budget_empty", providerReason: "credits_exhausted" }), /add credits/);
+});
 
 test("failure copy distinguishes time, planning allowance, service errors and unknown interruptions", () => {
   assert.match(replyFailureText("timeout"), /ran out of time/);
@@ -17,9 +33,16 @@ test("failure copy distinguishes time, planning allowance, service errors and un
   }
 });
 
-import { APICallError } from "ai";
-import { providerDiagnostics } from "../services/chat/provider";
+import { APICallError, StreamProviderError } from "ai";
+import { providerDiagnostics } from "../services/assistant/agent/diagnostics";
+import { boundedFailure } from "../services/assistant/agent/diagnostics";
 const apiError = (code: string | null, type = "insufficient_quota", headers: Record<string, string> = {}) => new APICallError({ message: "private provider message", url: "https://api.openai.com/v1/responses", requestBodyValues: { secret: "must not escape" }, statusCode: 429, responseHeaders: headers, data: { error: { code, type, message: "private provider message" } } });
+test("limits reported after streaming starts retain exact billing classification", () => {
+  const error = new StreamProviderError({ message: "private provider message", statusCode: 429, code: "credit_balance_exhausted", type: "insufficient_quota", data: { private: "not retained" } });
+  assert.equal(failureCode(error), "provider_limit");
+  assert.equal(providerDiagnostics(error)?.providerReason, "credits_exhausted");
+  assert.doesNotMatch(JSON.stringify(providerDiagnostics(error)), /private|not retained/);
+});
 test("429 copy distinguishes exhausted credits, spending caps, assigned usage and temporary limits", () => {
   for (const [code, text] of [["credit_balance_exhausted", /add credits/], ["insufficient_quota", /credits and limits/], ["project_spend_limit_exceeded", /billing limits/], ["organization_spend_limit_exceeded", /billing limits/], ["organization_usage_limit_exceeded", /service limits/]] as const) {
     const error = apiError(code), details = providerDiagnostics(error)!;
@@ -56,4 +79,15 @@ test("one request larger than a documented token allowance is not presented as a
   assert.equal(details.retryAfterSeconds, undefined);
   assert.match(replyFailureText("provider_limit", details), /request size or service limits/);
   assert.doesNotMatch(JSON.stringify(details), /private organization/);
+});
+
+test("saved input and terminal diagnostics stay within the existing SQL envelope", () => {
+  const report = boundedFailure({ code: "incomplete", steps: 17, elapsedMs: 228231, finishReason: "error",
+    termination: { kind: "tool_choice", errorType: "AI_ToolChoiceViolationError", toolChoice: "required", responseTypes: ["text"], causeTypes: ["private-not-retained"] },
+    inputFailure: { kind: "tool_input", errorType: "AI_InvalidToolInputError", toolName: "createPlan", issues: Array.from({ length: 12 }, () => ({ path: "plan.items.*.timing.start.binding".repeat(5), code: "invalid_type", instruction: "Expected the documented timing representation. ".repeat(8) })) } });
+  assert.ok(JSON.stringify(report).length < 1000);
+  assert.equal(report.termination?.kind, "tool_choice"); assert.equal(report.inputFailure?.toolName, "createPlan");
+  assert.ok(report.inputFailure?.issues?.length);
+  assert.doesNotMatch(JSON.stringify(report), /private-not-retained/);
+  assert.match(replyFailureText(report.code, report), /could not correct some details/);
 });

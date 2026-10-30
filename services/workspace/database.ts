@@ -20,7 +20,10 @@ export async function workspaceRpc<T>(
     | "planning_message"
     | "planning_withdraw"
     | "planning_record_action"
-    | "planning_run_result",
+    | "planning_run_result"
+    | "planning_draft_read"
+    | "planning_draft_claim"
+    | "planning_draft_put",
   parameters: Record<string, unknown>,
 ): Promise<T> {
   const base = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -42,7 +45,11 @@ export async function workspaceRpc<T>(
   });
   if (!response.ok) {
     const detail = await response.json().catch(() => ({}));
+    if (operation.startsWith("planning_draft_") && detail.code === "PGRST202") throw new WorkspaceError("Saved planning progress is temporarily unavailable. Please try again later.", 503, "DRAFT_MIGRATION_REQUIRED");
     const errors: Record<string, [string, number]> = {
+      DRAFT_CONFLICT: ["Planning progress changed. Retry from the conversation to continue safely.", 409],
+      DRAFT_EXPIRED: ["This unfinished planning progress has expired. Start a new message to plan from your saved trip.", 409],
+      DRAFT_INVALID: ["Planning progress could not be restored safely. Your saved trip is unchanged.", 400],
       PLAN_CONFLICT: [
         "The project changed. Reload the workspace and reconsider your edit before saving.",
         409,

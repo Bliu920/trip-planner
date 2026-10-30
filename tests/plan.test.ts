@@ -17,6 +17,18 @@ const user: Basis = {
   sources: [{ type: "legacy_notes" }],
   explanation: null,
 };
+test("a non-overlapping timetable still rejects a displayed sequence running backwards", () => {
+  const plan = examplePlan(), visit = plan.items["visit-1"];
+  if (visit.kind !== "visit") throw new Error();
+  visit.timing.start = { date: null, time: "10:00", binding: "suggested", basis: assumption };
+  const breakfast = structuredClone(visit);
+  breakfast.id = "breakfast"; breakfast.timing.start!.time = "08:00";
+  breakfast.timing.duration = { minMinutes: 30, maxMinutes: 30, basis: assumption };
+  plan.items.breakfast = breakfast; plan.days[0].itemIds.push("breakfast");
+  assert.ok(errors(plan).some(finding => finding.code === "sequence"));
+  plan.days[0].itemIds.reverse();
+  assert.ok(!errors(plan).some(finding => finding.code === "sequence"));
+});
 test("relative dates, stable IDs, real calendar offsets and uncertain durations", () => {
   const p = examplePlan();
   assert.deepEqual(errors(p), []);

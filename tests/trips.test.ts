@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
-import { handleTrip } from "../services/trips/index";
+import { handleTrip } from "../services/projects/trips/index";
 import { forgetTrip, readRecent, rememberTrip, STORAGE_KEY } from "../lib/trips/storage";
 import type { Trip } from "../lib/trips/types";
 

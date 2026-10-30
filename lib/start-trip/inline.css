@@ -1,0 +1,37 @@
+/* Reveal without resizing controls. */
+.start-trip-actions :is(.explore-inline-search, .project-recovery) {
+  --inline-trigger-size: 36px;
+}
+.start-trip-actions :is(.explore-inline-search, .project-recovery)[data-expanded] {
+  animation: starter-inline-reveal 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.start-trip-actions :is(.explore-inline-search, .project-recovery)[data-expanded] button,
+.start-trip-actions
+  :is(.explore-inline-search, .project-recovery)[data-expanded]
+  button:is(:hover, :focus-visible, :active, [aria-expanded="true"]) {
+  background: transparent;
+  box-shadow: none;
+}
+.start-trip-actions
+  :is(.explore-inline-search, .project-recovery)[data-expanded]
+  button:is(:hover, :focus-visible):not(:disabled) {
+  color: #222;
+}
+@keyframes starter-inline-reveal {
+  from {
+    clip-path: inset(0 0 0 calc(100% - var(--inline-trigger-size)) round 9px);
+  }
+  to {
+    clip-path: inset(0 round 9px);
+  }
+}
+@media (max-width: 600px), (pointer: coarse) {
+  .start-trip-actions :is(.explore-inline-search, .project-recovery) {
+    --inline-trigger-size: 44px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .start-trip-actions :is(.explore-inline-search, .project-recovery)[data-expanded] {
+    animation: none;
+  }
+}

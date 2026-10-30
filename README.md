@@ -18,14 +18,14 @@ Use Node.js 22 and npm. For a complete local setup, use a Supabase project and a
    This writes to the configured Supabase project and verifies the results. To validate the local data without writing, run `node --import tsx scripts/catalog/index.ts`. To compare the database with the supplied files without writing, run `node --env-file-if-exists=.env.local --import tsx scripts/catalog/index.ts --verify`.
 5. Run `npm run dev` and open [localhost:3000](http://localhost:3000).
 
-Without Supabase configuration, the place browser can use the bundled data, but trip creation and persistence require storage. AI chat and transcription require the OpenAI key and model access. These services do not silently simulate successful saves. For Library cleanup, configure `DOCUMENT_CLEANUP_SECRET` and a trusted scheduler as described in the [Library guide](docs/modules/library.md).
+Without Supabase configuration, the place browser can use the bundled data, but trip creation and persistence require storage. AI chat and transcription require the OpenAI key and model access. These services do not silently simulate successful saves. Library supports manual deletion and retries; periodic file cleanup is intentionally omitted for this short-lived project. See the [Library guide](docs/modules/library.md).
 
 **Existing databases:** migration files were renamed for the product baseline. Some older versions were already applied to an existing database. Do not blindly rerun or repair them. Compare the actual schema and migration history with the [old-to-new mapping](docs/migration-versions.md), then plan reconciliation for that database before applying further migrations. The mapping does not establish which migrations have been applied in any particular environment.
 
 ## Routes and access
 
 - `/projects/new` starts a trip or resumes one saved on this device. `/` and `/projects` redirect there.
-- `/trips/:reference` opens the trip workspace. `/explore` browses places; `/about` explains the product and `/credits` provides image credits.
+- `/trips/:reference` opens the trip workspace. Explore is a tab on `/projects/new`; its upper-right navigation links to `/about` for the product story and `/credits` for image credits.
 - A trip reference grants read and edit access to that trip. Anyone with the link can edit it. Keep links private and retain a copy. Device history is stored locally; there is no account-based recovery.
 - The server uses privileged Supabase access. Browser roles do not have direct access to trip tables. Add deployment-level rate limiting and abuse controls before broad public use of anonymous creation and paid AI requests.
 
@@ -39,18 +39,20 @@ The chat route requests a 600-second hosting duration and uses a 540-second appl
 
 ```sh
 npm run lint
+npm run format:check
 npm run typecheck
 npm test
 npm run build
 ```
 
-Tests use isolated fixtures and mocked providers where documented. Passing tests does not verify a hosted database, deployed cleanup scheduler, microphone, model access or live research.
+Tests use isolated fixtures and mocked providers where documented. Passing tests does not verify a hosted database, microphone, model access or live research.
 
 ## Code structure
 
 - `app/`: page and API entry points.
 - `lib/`: frontend modules and shared types, validation and domain logic.
-- `services/`: server-side orchestration, persistence and agent tools.
+- Frontend reading order, common extension points and formatting: [Frontend guide](docs/modules/frontend.md).
+- `services/`: server-side modules grouped under `assistant/`, `projects/` and `places/`, with independent Plan, Budget, Library and workspace services. See the [service directory guide](services/README.md).
 - `components/ui/`: reusable UI controls.
 - `data/`: source catalog and photo metadata.
 - `supabase/migrations/`: ordered database changes.

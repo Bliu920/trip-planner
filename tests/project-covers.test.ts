@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { selectCoverPhotos } from "../services/project-covers/selection";
-import { handleProjectCover } from "../services/project-covers";
+import { selectCoverPhotos } from "../services/projects/project-covers/selection";
+import { handleProjectCover } from "../services/projects/project-covers";
 import { examplePlan } from "./plan-fixture";
 import italy from "../data/italy.json";
 import photos from "../data/place-photos.json";

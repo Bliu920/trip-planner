@@ -2,12 +2,12 @@
 
 Feature name: **Library**. Individual files remain documents in the data model. Existing `documents` code paths, API routes and stored identifiers retain their technical names for compatibility.
 
-Status: implemented and verified locally. Migration and cleanup scheduler deployment remain pending.
-Last updated: 2026-10-29.
+Status: implemented and verified locally. Scheduled file cleanup was retired on 2026-10-30. Database migration deployment is separate.
+Last updated: 2026-10-30.
 
 ## Purpose and boundary
 
-Library manages each trip’s uploaded files and editable Markdown, TXT and CSV files. PDF, PNG and JPEG files are read-only previews. It owns original bytes, metadata, upload verification, listing, preview/download, naming, deletion and cleanup. A user can manage the library without loading a conversation or contacting an AI provider.
+Library manages each trip’s uploaded files and editable Markdown, TXT and CSV files. PDF, PNG and JPEG files are read-only previews. It owns original bytes, metadata, upload verification, listing, preview/download, naming and user-triggered deletion. A user can manage the library without loading a conversation or contacting an AI provider.
 
 A document belongs to a trip. Messages reference documents; they do not own or consume them. The same original can be reused across messages and conversations without another Storage object.
 
@@ -16,6 +16,10 @@ Chat owns message history, active document selection and provider-specific model
 ### Code map
 
 - `lib/documents/index.ts`: frontend public entrypoint.
+- `library.tsx`: list layout, view selection and file navigation. `use-upload.ts` owns upload selection, validation, progress and partial-success retries.
+- `detail.tsx`: current-file rendering, toolbar and links. `use-detail.ts` owns metadata loading, subscriptions, mutation state and unsaved-change guards.
+- `editor.tsx`: text fields and toolbar. `use-editor.ts` owns the draft, abortable loading, validation, save revision and reload confirmation.
+- `controls.tsx`: picker and shared icon/dialog/size controls. `client.ts` remains the request and notification boundary; `navigation.tsx` remains workspace file routing.
 - `lib/file-types/index.ts`: shared, browser-safe file capability API. `formats.json` is the sole supported-format policy.
 - `lib/documents/types.ts`: metadata contracts and Library name validation; delegates format validation to the shared policy.
 - `lib/documents/`: library, inline file view, selection controls, workspace navigation and client requests.
@@ -23,8 +27,8 @@ Chat owns message history, active document selection and provider-specific model
 - `services/documents/`: metadata transactions, original bytes and lifecycle work.
 - `lib/attachments/`: compatibility adapters for existing starter/composer APIs, plus chat draft integration.
 - `services/attachments/index.ts`: compatibility export for existing attachment routes. It does not own another store.
-- `services/chat/documents.ts`: chat-owned model-context assembly.
-- `services/conversations/`: chat-owned document selection operations.
+- `services/assistant/agent/context/messages.ts`: Agent context assembly.
+- `services/assistant/conversation-store/`: conversation document selection persistence.
 - `lib/workspace/`: composition of the Library view and Chat callbacks.
 
 ## Information model
@@ -49,7 +53,7 @@ Uploaded binary originals are immutable under a document ID. Replacing a PDF/ima
 | Local only | File selected but upload not reserved | Remove selection or upload |
 | `pending` | Reservation exists; transfer or verification is unfinished | Retry transfer/finalization or delete; not readable by model/download |
 | `ready` | Size and format verified; content stored | Preview or edit supported text, download, rename, reference in chat, delete |
-| `deleting` | New use denied, physical cleanup remains outstanding | Retry cleanup; no restore or new content access |
+| `deleting` | New use denied, physical cleanup remains outstanding | Retry deletion; no restore or new content access |
 | `deleted` | Physical deletion settled after outstanding upload grants expire | Minimal historical tombstone; no content access |
 
 `ready` proves storage verification only. It does not prove parseability, successful AI interpretation, lack of malware, booking validity or external factual accuracy.
@@ -60,7 +64,7 @@ Formats and limits come from the shared policy below. Text supports empty UTF-8 
 
 A successful upload followed by failed chat submission remains in Library. A partial batch keeps successful files and retries remaining work with stable IDs. Removing a saved file from a draft does not delete the trip document. Browser reload loses local file bytes; recover finalization if Storage received the bytes, otherwise select the original again. Do not promise persistent browser drafts.
 
-Pending transfers expire after 24 hours of inactivity. Ready documents do not expire merely because no chat references them. Quota is 30 live/reserved documents per trip; deleting objects retain their reservation until physical cleanup and upload-grant settlement are complete.
+Pending transfers and unreferenced ready documents do not expire automatically. Remove unwanted files through Library. Quota is 30 live/reserved documents per trip; deleting objects retain their reservation until physical cleanup and upload-grant settlement are complete.
 
 ### Preview and management
 
@@ -80,11 +84,11 @@ The attachment adapter owns the menu, local file input and draft integration. Li
 
 Rename uses a revision check. A stale tab must reload after a conflict; it cannot overwrite a newer name. Delete is a distinct confirmed operation, explaining that existing messages and planning facts remain. Pending/deleting records remain visible for recovery. Completed tombstones do not appear in the normal list.
 
-### Deletion and cleanup
+### User-triggered deletion
 
-Deletion first revokes new document use in the database, removes active selections, and preserves historical message references. Physical Storage removal is retried independently. Database and Storage are not treated as an atomic system.
+Deletion first revokes new document use in the database, removes active selections, and preserves historical message references. Physical Storage removal is attempted during deletion and retried only when the user selects Retry deletion. Database and Storage are not treated as an atomic system.
 
-The server records a conservative outstanding upload-grant window before issuing signed URLs. Supabase documents a two-hour signed-upload lifetime. Cleanup must retain the locator and recheck after the grant window so a delayed upload cannot leave an untracked original. A completed deletion must not be inferred from a single successful early remove request.
+The server records a conservative outstanding upload-grant window before issuing signed URLs. Supabase documents a two-hour signed-upload lifetime. Keep the locator while a grant is outstanding; a later manual retry removes any delayed upload before marking deletion complete. A completed deletion must not be inferred from a single successful early remove request.
 
 Already-admitted downloads or model requests may finish. Model context is rechecked before transmission, but bytes already delivered cannot be recalled. Deletion does not scrub existing transcript quotations, saved planning facts, provider processing or infrastructure backups.
 
@@ -118,7 +122,7 @@ Each edit has a stable ID, expected metadata revision, name, kind and complete t
 
 Publishing creates an immutable content version and advances the metadata head. Metadata revision also changes on rename; content revision advances when a save publishes content. SQL `document_versions` stores path/hash/size/author, never the body. User and agent authorship are distinguished. Uploaded text starts at version 1, preserving the original object and its outstanding upload grant. Edited uploads retain their original filename, ID and kind. Every text read verifies its hash; a concurrent head change causes a retryable conflict rather than returning mismatched content and metadata.
 
-`validateDocumentEdit` runs before AI staging accepts an edit and again in `prepareDocument` against current metadata. `prepareDocument` reserves and uploads bytes; `publishDocument` publishes by expected revision. Workspace can publish prepared files and a Plan/Budget in one transaction. Unpublished writes stay unreadable and become cleanup candidates after 24 hours. Deletion removes the uploaded original, all published versions and staged paths. The existing grant-expiry cleanup protection continues to apply after text edits.
+`validateDocumentEdit` runs before AI staging accepts an edit and again in `prepareDocument` against current metadata. `prepareDocument` reserves and uploads bytes; `publishDocument` publishes by expected revision. Workspace can publish prepared files and a Plan/Budget in one transaction. Unpublished writes stay unreadable and are retained until project teardown or deletion of their document. Deletion removes the uploaded original, all published versions and staged paths. Outstanding upload grants still prevent deletion from being marked complete too early; manual deletion retries preserve this protection after text edits.
 
 The editor preserves unsaved text on failed saves and external refreshes. Reload and Close confirm before discarding edits. Conflicts require reviewing current content before reapplying changes; no automatic merge. Historical versions are available through the API without a browsing UI. Agent reads also return the complete file unchanged; the read tool has no section parameter. Historical source citations may retain a section hint as metadata, which does not control file reads or edits.
 
@@ -148,11 +152,10 @@ All trip routes use the existing bearer-like UUID trip-reference access model. A
 | `POST /api/trips/:reference/documents` | Reserve `{id,name,mediaType,size,source}`; returns `{document,ready,uploadUrl?}` |
 | `GET /api/trips/:reference/documents/:id` | Current detail metadata and usage references, including tombstones |
 | `PATCH /api/trips/:reference/documents/:id` | Rename `{name,revision}` with optimistic concurrency |
-| `DELETE /api/trips/:reference/documents/:id` | Delete `{revision}`; cleanup may remain pending |
+| `DELETE /api/trips/:reference/documents/:id` | Delete `{revision}`; physical deletion may require a manual retry |
 | `POST /api/trips/:reference/documents/:id/finalize` | Verify received bytes and finalize readiness |
 | `GET /api/trips/:reference/documents/:id/content` | Authorized download; `?inline=1` requests preview |
 | `DELETE /api/trips/:reference/conversations/:id/documents/:documentId` | Stop using the file in this conversation |
-| `POST /api/internal/documents/cleanup` | Bounded cleanup authenticated by a dedicated bearer secret |
 
 Existing attachment routes remain compatibility adapters, including starter ID resolution. New clients use document routes. Content and metadata responses are not publicly cached. Preview and download do not expose service credentials or persist public object URLs.
 
@@ -160,9 +163,9 @@ Existing attachment routes remain compatibility adapters, including starter ID r
 
 Apply `supabase/migrations/20261026110643_documents.sql` after the existing trip, chat and attachment migrations. Do not edit applied migrations or re-upload existing documents. Backfill historical references and active selections, preserve message display snapshots and existing object IDs/paths. Migration tests execute the prior schema with existing data, apply the new migration and check IDs, paths, historical references and conversation-independent document survival.
 
-Storage uses the existing `SUPABASE_URL` and server secret configuration. Cleanup additionally requires `DOCUMENT_CLEANUP_SECRET`, configured only on the server and the trusted scheduler, with at least 32 characters. `.env.example` contains an empty placeholder. Do not put it in client-visible environment variables or docs.
+Storage uses the existing `SUPABASE_URL` and server secret configuration. No cleanup key, maintenance endpoint or scheduler is required.
 
-A trusted external scheduler should POST to the cleanup endpoint periodically, for example every five minutes, with `Authorization: Bearer <DOCUMENT_CLEANUP_SECRET>`. Each request claims at most 10 due records and processes Storage removal concurrently. Failed claims become retryable after five minutes. The route declares a 60-second maximum duration, subject to hosting support. Endpoint implementation is not proof that a scheduler has been deployed. If cleanup fails, deleting records remain inaccessible and retryable; unfinished cleanup continues to consume quota. Use the library states, server logs and bounded endpoint result to diagnose work. Avoid logging document contents, signed URLs or secrets.
+Apply `supabase/migrations/20261030210000_retire_document_cleanup.sql` to remove the old maintenance functions, scheduling index and dedicated columns. Earlier migrations remain historical and must not be rewritten. User deletion still revokes access immediately and attempts physical removal. If removal fails or an upload grant is still valid, use Library's Retry deletion action later. There is no automatic retry or expiry of abandoned files. Incomplete deletion continues to consume quota. Unpublished text writes can remain in storage until project teardown.
 
 Official storage references: [signed upload URLs](https://supabase.com/docs/reference/javascript/file-buckets-createsigneduploadurl) and [Storage client removal implementation](https://github.com/supabase/supabase-js/blob/master/packages/core/storage-js/src/packages/StorageFileApi.ts). Current implementation assumptions were checked on 2026-10-26.
 
@@ -172,10 +175,10 @@ Supported-file verification (2026-10-28): full-project lint, typecheck, all 239 
 
 Browser checks used the production UI with disposable PGlite/object storage and no live providers. Verified CSV creation, TXT/CSV uploads, editing uploaded TXT, reload, unsaved-close cancellation, automatic extension selection, unsupported SVG rejection, read-only image/PDF controls and desktop/390px layout. Save is visible in the portaled dialog, mobile editing buttons are 44px, and the mobile page has no horizontal overflow. Screenshots: `.local/library-text-editor-desktop.png` and `.local/library-text-editor-mobile.png`.
 
-PDF verification limit: this embedded test browser reported native PDF capability but rendered a blank viewer both in Library and at the direct PDF URL. File delivery and headers were verified; successful native PDF pixel rendering is not claimed. A temporary header compatibility experiment did not resolve it and was reverted. The original private-content security headers remain intact. Download is always available and browsers reporting no native viewer receive an explicit fallback. Live migration, Storage/CORS, deployed cleanup and an independent normal-browser PDF rendering check remain deployment checks.
+PDF verification limit: this embedded test browser reported native PDF capability but rendered a blank viewer both in Library and at the direct PDF URL. File delivery and headers were verified; successful native PDF pixel rendering is not claimed. A temporary header compatibility experiment did not resolve it and was reverted. The original private-content security headers remain intact. Download is always available and browsers reporting no native viewer receive an explicit fallback. Live migration, Storage/CORS and an independent normal-browser PDF rendering check remain deployment checks.
 
 
-Automated coverage includes: existing upload security, same-trip reuse, cross-trip denial, atomic reference/selection persistence, metadata-only list, stale rename, deletion versus finalization, historical references after delete, Storage failure retry, late signed uploads, pending expiry, quota reclamation and migration backfill.
+Automated coverage includes: existing upload security, same-trip reuse, cross-trip denial, atomic reference/selection persistence, metadata-only list, stale rename, deletion versus finalization, historical references after delete, Storage failure retry, late signed uploads, manual quota reclamation and migration backfill.
 
 Validation commands: `npm run lint`, `npm run typecheck`, `npm test`, and `npm run build`.
 
@@ -186,7 +189,7 @@ Icon/list view verification (2026-10-26): lint, typecheck, the seven document-cl
 - Browser verification used a disposable PGlite database, local object map and mocked provider stream behind a localhost fixture. Verified standalone image upload, saved-document staging without sending, send/reuse without a duplicate object, active-selection removal, preview, rename preserving original filename, deletion confirmation/cancellation, and focus restoration.
 - Desktop and 390px mobile library views were inspected. The mobile document width equals the viewport width (390px), with no horizontal overflow. Screenshot evidence is local under `.local/documents-desktop.jpg` and is not a production-data capture.
 - The plus menu was checked at desktop and 390px mobile widths. Verified Enter/arrow navigation, Escape and outside-click dismissal, menu-to-dialog focus handoff, focus restoration, existing-selection labels, draft preservation, native multi-file chooser, starter direct upload, and a combined saved/new-file send with the mocked provider. Mobile trigger and menu items measured 44px with no horizontal overflow. Browser logs had no errors or warnings. Evidence: `.local/attachment-menu-desktop.jpg` and `.local/attachment-menu-mobile.jpg`.
-- Physical deletion, late-upload cleanup and migration behavior were tested through SQL/service fixtures, not by deleting live files. No live migration, Supabase upload/deletion or model request occurred. Live bucket/CORS behavior and deployed scheduler execution still need environment verification.
+- Physical deletion, late-upload cleanup and migration behavior were tested through SQL/service fixtures, not by deleting live files. No live migration, Supabase upload/deletion or model request occurred. Live bucket/CORS behavior still needs environment verification.
 
 Small HTTP/compatibility adapters use the small-module exception. The document contract is a pure shared file; frontend files are separated into client state, library, reusable detail/picker controls and public exports, plus styles.
 
@@ -197,6 +200,8 @@ No OCR/indexing, account-level ownership, folders, binary replacement, rich text
 Integration preserves the concurrent Audio feature and avoids changing its composer and prompt-input files. After its task completed, its authoritative guide moved to [audio-input.md](audio-input.md), with the previous path retained as a redirect. Both modules follow the same maintenance contract.
 
 ## Change history
+
+- 2026-10-30: Separated Library rendering from editor/detail/upload state while preserving public exports, request payloads, drafts, focus restoration and UI. Six initial render outputs match the prior source. Isolated browser review covered file navigation, failed-save draft retention, successful retry, renaming, deletion cancellation, CSV creation and upload failure/retry. All 501 offline tests, formatting check, lint, typecheck and production build passed. No hosted data changes.
 
 - Restored the original desktop arrangement: content on the left and chat on the right. The inline file workspace remains unchanged.
 
@@ -223,7 +228,7 @@ Integration preserves the concurrent Audio feature and avoids changing its compo
 
 ## Maintenance
 
-Every change to this module, its migration, cleanup operations or chat/workspace integration must update this guide in the same change. Keep current-state sections accurate and add a dated change entry with verification. Follow the shared [maintenance contract](README.md#maintenance-contract). Do not maintain a competing lifecycle specification in task paperwork.
+Every change to this module, its migrations, deletion operations or chat/workspace integration must update this guide in the same change. Keep current-state sections accurate and add a dated change entry with verification. Follow the shared [maintenance contract](README.md#maintenance-contract). Do not maintain a competing lifecycle specification in task paperwork.
 
 ## Shared project refresh
 
@@ -231,9 +236,9 @@ Every change to this module, its migration, cleanup operations or chat/workspace
 
 ## Travel brief checkpoint
 
-The agent's trip-details guide defines the contents of the single planning_context document, initially named Travel brief.md. It is a sourced requirements view with preferences, budget reference, dates/arrival/departure, group/activity needs, existing arrangements/constraints and questions. Application rules stay in services/guides; the brief contains project-specific interpretation only. Plan and Budget retain their own facts.
+The agent's trip-details guide defines the contents of the single planning_context document, initially named Travel brief.md. It is a sourced requirements view with preferences, budget reference, dates/arrival/departure, group/activity needs, existing arrangements/constraints and questions. Application rules stay in services/assistant/agent/guides; the brief contains project-specific interpretation only. Plan and Budget retain their own facts.
 
-The saveBrief tool publishes an independent checkpoint through planning_save_brief before dependent planning proposals. It reuses immutable Markdown versions, metadata revisions, private Storage and cleanup. No new document kind or content table is added. Stopping planning does not roll back a published brief and does not imply a completed plan. Final-stage brief updates can still be staged with the plan/budget commit.
+The saveBrief tool publishes an independent checkpoint through planning_save_brief before dependent planning proposals. It reuses immutable Markdown versions, metadata revisions, private Storage and user-triggered deletion. No new document kind or content table is added. Stopping planning does not roll back a published brief and does not imply a completed plan. Final-stage brief updates can still be staged with the plan/budget commit.
 
 Project content starts with chat alone. The top header opens or closes trip content at the regular width, initially showing Library. Reopening restores the last selected view. Plan and Budget tabs appear when their saved artifacts exist; failed loads remain reachable for recovery. The first saved Plan opens the content panel and selects Plan once per project session. Later refreshes preserve the selected view. A Budget arriving first does not open a panel. Mobile keeps focused chat visible when the first Plan arrives. Mounted surfaces retain state across tab switches. Saved files and research actions are accessible from persistent assistant-message activity. See [Planning activity](activity.md).
 
@@ -267,3 +272,7 @@ October 28, 2026: removed the redundant Trip Details gear and workspace panel. R
 ## Supporting planning records
 
 October 29, 2026: the agent can conditionally maintain Research notes.md using the existing research kind, and Planning decisions.md using working. These are ordinary independently readable Markdown files with existing history, rename and exact-edit behavior. Creation names are defaults, not fixed identities or new database roles. The agent discovers current metadata, reads relevant candidates to establish purpose, reuses their returned IDs, and updates affected content instead of creating duplicate notes. No empty files are generated merely to populate Library. The maintained lifecycle and ownership rules live in the planning-documents guide. User requirements, selected itinerary and cost facts remain in their existing authoritative artifacts.
+
+## Scheduled cleanup retirement (2026-10-30)
+
+The maintenance HTTP endpoint, worker and configuration were removed for this short-lived project. Historical verification entries above describe earlier implementations; scheduled cleanup and 24-hour file expiry no longer apply. Manual deletion, retries, grant protection, source isolation and stored document history remain supported. Verification: 77 focused tests and all 496 offline tests passed, together with lint and typecheck. The forward migration was tested in PGlite, not applied to hosted Supabase.

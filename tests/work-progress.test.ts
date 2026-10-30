@@ -65,6 +65,15 @@ test("headers distinguish active, completed, stopped, failed and legacy work", (
   assert.equal(workLabel(true, undefined, null, "Loading your conversation..."), "Loading your conversation...");
 });
 
+test("work durations switch to minutes at sixty seconds across all outcomes", () => {
+  for (const [elapsed, duration] of [[0, "0s"], [59999, "59s"], [60000, "1m"], [61000, "1m 1s"], [119999, "1m 59s"], [120000, "2m"], [135000, "2m 15s"], [345000, "5m 45s"], [3600000, "60m"]] as const) {
+    assert.equal(workLabel(true, "streaming", elapsed, null), `Working · ${duration}`);
+    assert.equal(workLabel(false, "complete", elapsed, null), `Worked for ${duration}`);
+    assert.equal(workLabel(false, "interrupted", elapsed, null), `Stopped after ${duration}`);
+    assert.equal(workLabel(false, "failed", elapsed, null), `Could not finish after ${duration}`);
+  }
+});
+
 test("run markers do not become visible steps; the newest run supplies timing", () => {
   const latest = { ...run, id: "retry", attempt: "89fd9d92-d38d-4a5e-93c1-09747c76a964" };
   const parts = [run, steps[0], latest].map(data => ({ type: "data-activity", data }));

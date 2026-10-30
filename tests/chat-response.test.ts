@@ -66,11 +66,12 @@ test("real rendered responses enforce trailing single-spinner layout", () => {
 test("workspace delegates response rendering instead of adding a competing indicator", () => {
   const workspace = readFileSync("lib/workspace/chat.tsx", "utf8");
   assert.match(workspace, /buildTranscript\(messages,/);
-  assert.match(workspace, /<ChatResponse key=\{item.key\}/);
+  assert.match(workspace, /<MessageScrollerItem\s+key=\{item.key\}\s+messageId=\{item.key\}/);
+  assert.match(workspace, /<ChatResponse\s+item=\{item\}/);
   assert.doesNotMatch(workspace, /LoaderCircle|animate-spin|data-chat-activity|<ActivityHistory|Working on your trip/);
   const history = readFileSync("lib/activity/history.tsx", "utf8");
   assert.doesNotMatch(history, /LoaderCircle|animate-spin|aria-live|role="status"/);
   const response = readFileSync("lib/chat-response/view.tsx", "utf8");
-  assert.match(response, /<WorkProgress key="response-progress"/);
+  assert.match(response, /<WorkProgress\s+key="response-progress"/);
   assert.doesNotMatch(response, /LoaderCircle|animate-spin|data-chat-activity|<ActivityHistory/);
 });

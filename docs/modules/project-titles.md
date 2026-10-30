@@ -6,10 +6,10 @@ Last updated: 2026-10-28.
 
 ## Purpose and boundary
 
-`services/project-titles` is a server-only, self-contained module. It accepts a prompt and returns a plain title. It has no database access, chat history, tools or dependency on the planning agent. Three files separate the public orchestration (`index.ts`), model configuration (`model.ts`) and prompt/output rules (`prompt.ts`).
+`services/projects/project-titles` is a server-only, self-contained module. It accepts a prompt and returns a plain title. It has no database access, chat history, tools or dependency on the planning agent. Three files separate the public orchestration (`index.ts`), model configuration (`model.ts`) and prompt/output rules (`prompt.ts`).
 
 ```ts
-import { generateProjectTitle } from "@/services/project-titles";
+import { generateProjectTitle } from "@/services/projects/project-titles";
 
 const title = await generateProjectTitle(prompt);
 // Optional cancellation:

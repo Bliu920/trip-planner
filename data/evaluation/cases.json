@@ -1,231 +1,6 @@
 [
   {
     "version": 1,
-    "id": "S01",
-    "category": "initial",
-    "title": "Initial draft through successive personalization",
-    "prompt": "Two adults in Rome, November 4 to 6, 2026. We like history and food, prefer a moderate pace, and have EUR 800 total excluding flights. Please create our plan.",
-    "fixture": "empty",
-    "research": "live",
-    "assertions": [
-      {
-        "type": "saved_plan"
-      },
-      {
-        "type": "saved_budget"
-      },
-      {
-        "type": "saved_brief"
-      },
-      {
-        "type": "three_days"
-      },
-      {
-        "type": "final_receipt"
-      },
-      {
-        "type": "brief_before_plan"
-      }
-    ],
-    "expected": {
-      "reply_example": "I saved the requested changes and kept the other arrangements.",
-      "artifact_expectations": "Run all turns in the same project and conversation, using actual outputs from the preceding turn. Never reseed later steps with a reference itinerary."
-    },
-    "rubric": [
-      {
-        "id": "S01-R1",
-        "criterion": "Turn 1 saves a complete evidence-based three-day Rome itinerary and applicable priced budget for two with EUR 800 party limit and flight exclusion, specific meals, local clock schedule and both nights. Any unmet budget or route constraint is honest."
-      },
-      {
-        "id": "S01-R2",
-        "criterion": "Turn 2 updates the same requirements and applicable costs for four adults and vegetarian meals, without losing dates, history interests or the party-level spending limit. Suitable specific menus are supported or uncertain suitability is disclosed."
-      },
-      {
-        "id": "S01-R3",
-        "criterion": "Turn 3 frees day two afternoon without moving or deleting unrelated day-one/day-three arrangements; correct only necessary dependencies and preserve protected facts."
-      },
-      {
-        "id": "S01-R4",
-        "criterion": "Turn 4 changes only the spending limit and applicable brief reference. Existing plan, cost amounts and evidence dates stay intact."
-      },
-      {
-        "id": "S01-R5",
-        "criterion": "Turn 5 creates a useful Packing.md. Turn 6 updates that same document, retaining unrelated content and the trip. Turn 7 answers using actual current state without any save or invented change."
-      },
-      {
-        "id": "S01-R6",
-        "criterion": "Every turn reports its real save/evidence state. Later inputs do not silently erase earlier requirements. No full itinerary is duplicated in chat or the Travel brief; material research/decision files are preserved only when useful."
-      }
-    ],
-    "followUps": [
-      {
-        "prompt": "Two friends joined, so we are four adults now. We are all vegetarian. Adjust our meals and estimate, keeping the same dates and total spending limit.",
-        "assertions": [
-          {
-            "type": "saved_plan"
-          },
-          {
-            "type": "saved_budget"
-          },
-          {
-            "type": "budget_scope",
-            "scope": "party",
-            "travelers": 4,
-            "limit": 800
-          },
-          {
-            "type": "final_receipt"
-          }
-        ]
-      },
-      {
-        "prompt": "Keep all of day two afternoon free for us to explore on our own. Preserve day one and day three.",
-        "assertions": [
-          {
-            "type": "final_receipt"
-          }
-        ]
-      },
-      {
-        "prompt": "Our party spending limit is now EUR 1400. Change only that limit and the brief reference. Keep all arrangements and price estimates.",
-        "assertions": [
-          {
-            "type": "plan_unchanged"
-          },
-          {
-            "type": "budget_scope",
-            "scope": "party",
-            "travelers": 4,
-            "limit": 1400
-          },
-          {
-            "type": "final_receipt"
-          }
-        ]
-      },
-      {
-        "prompt": "Create Packing.md in the Library, including one light jacket as a suggestion. Do not change the trip or budget.",
-        "assertions": [
-          {
-            "type": "document_count",
-            "name": "Packing.md",
-            "count": 1
-          },
-          {
-            "type": "plan_budget_unchanged"
-          },
-          {
-            "type": "final_receipt"
-          }
-        ]
-      },
-      {
-        "prompt": "In Packing.md replace the light jacket suggestion with a rain layer suggestion. Keep all other content and the trip unchanged.",
-        "assertions": [
-          {
-            "type": "document_updated",
-            "name": "Packing.md"
-          },
-          {
-            "type": "document_count",
-            "name": "Packing.md",
-            "count": 1
-          },
-          {
-            "type": "plan_budget_unchanged"
-          },
-          {
-            "type": "final_receipt"
-          }
-        ]
-      },
-      {
-        "prompt": "Without changing anything, summarize our current group, dates, dietary needs, spending limit and which afternoon is free.",
-        "assertions": [
-          {
-            "type": "unchanged_artifacts"
-          },
-          {
-            "type": "no_mutations"
-          }
-        ]
-      }
-    ]
-  },
-  {
-    "version": 1,
-    "id": "S02",
-    "category": "follow_up",
-    "title": "Research and decisions survive a later edit",
-    "prompt": "Compare central Rome and Trastevere as a base using research. Save useful findings in Research notes.md and the main tradeoff in Planning decisions.md. These are supporting files only; keep my itinerary and Budget unchanged.",
-    "fixture": "rome",
-    "research": "live",
-    "assertions": [
-      {
-        "type": "document_count",
-        "name": "Research notes.md",
-        "count": 1
-      },
-      {
-        "type": "document_count",
-        "name": "Planning decisions.md",
-        "count": 1
-      },
-      {
-        "type": "plan_budget_unchanged"
-      },
-      {
-        "type": "final_receipt"
-      }
-    ],
-    "expected": {
-      "reply_example": "I saved the requested changes and kept the other arrangements.",
-      "artifact_expectations": "Supporting files retain distinct ownership and document identities across a real follow-up."
-    },
-    "rubric": [
-      {
-        "id": "S02-R1",
-        "criterion": "Turn 1 researches actual evidence, records URLs, checked dates and applicability in Research notes.md, and concise base tradeoffs in Planning decisions.md. No duplicate cost ledger, requirements list or itinerary is maintained."
-      },
-      {
-        "id": "S02-R2",
-        "criterion": "Turn 2 reads and updates the existing Planning decisions document in place, records the user choice of central Rome, preserves unrelated content and original research checked dates unless actually revisited, and does not duplicate either file."
-      },
-      {
-        "id": "S02-R3",
-        "criterion": "Both turns preserve Plan and Budget and report only receipt-backed document saves. A prior file listing alone is not a content read."
-      }
-    ],
-    "followUps": [
-      {
-        "prompt": "We choose central Rome for easier access to the historic center. Read our existing supporting notes and update Planning decisions.md with that choice. Keep Research notes.md, the trip and prices as they are.",
-        "assertions": [
-          {
-            "type": "document_updated",
-            "name": "Planning decisions.md"
-          },
-          {
-            "type": "document_count",
-            "name": "Research notes.md",
-            "count": 1
-          },
-          {
-            "type": "document_count",
-            "name": "Planning decisions.md",
-            "count": 1
-          },
-          {
-            "type": "plan_budget_unchanged"
-          },
-          {
-            "type": "final_receipt"
-          }
-        ]
-      }
-    ]
-  },
-  {
-    "version": 1,
     "id": "B01",
     "category": "follow_up",
     "title": "Confirmed receipt replaces estimated hotel allowance",
@@ -248,7 +23,7 @@
       }
     ],
     "expected": {
-      "reply_example": "I saved the requested changes and kept the other arrangements.",
+      "reply_example": "Recorded the hotel payment as EUR 240 total for both shared-room nights, including taxes. The itinerary and other estimates are unchanged.",
       "artifact_expectations": "The user-provided synthetic receipt establishes EUR 240 paid total for both shared-room nights, not EUR 240 each night. Cite the actual document and content revision; preserve unrelated costs."
     },
     "rubric": [
@@ -276,80 +51,20 @@
       },
       {
         "type": "no_mutations"
-      },
-      {
-        "type": "successful_tool",
-        "names": [
-          "getJourneys"
-        ]
       }
     ],
     "expected": {
-      "reply_example": "I saved the requested changes and kept the other arrangements.",
-      "artifact_expectations": "No map service is configured in this controlled case. Return real itinerary findings and label unverified connections honestly, without zero-time fallbacks or claiming checks succeeded."
+      "reply_example": "No journey checks are available for this plan. Transfer times remain uncertain, and I have not changed the trip or budget.",
+      "artifact_expectations": "No map service is configured, so getJourneys and resolvePlace are not offered. Use the supplied current itinerary and any available journey findings. Label unavailable checks and uncertain connections honestly, without zero-time fallbacks or claiming checks succeeded."
     },
     "rubric": [
       {
         "id": "G01-R1",
-        "criterion": "Use the current itinerary journey report and distinguish checked, conflicting and unverified connections. Missing route evidence cannot become a zero-duration transfer or a verified feasible route."
+        "criterion": "Use the current itinerary and any available journey results. When no route service or report is available, explicitly retain uncertainty rather than requiring an unavailable tool. Missing evidence cannot become a zero-duration transfer or a verified feasible route."
       },
       {
         "id": "G01-R2",
         "criterion": "Answer without changing any stored plan, budget or supporting documents; do not imply a live transit timetable was checked."
-      }
-    ]
-  },
-  {
-    "version": 1,
-    "id": "L01",
-    "category": "initial",
-    "title": "Chinese initial request and successive correction",
-    "fixture": "empty",
-    "research": "live",
-    "prompt": "我们两位成人，2026年11月4日至6日在罗马，喜欢历史和当地美食，节奏适中。总预算800欧元，不含往返意大利机票。请生成行程。",
-    "assertions": [
-      {
-        "type": "saved_plan"
-      },
-      {
-        "type": "saved_budget"
-      },
-      {
-        "type": "saved_brief"
-      },
-      {
-        "type": "final_receipt"
-      },
-      {
-        "type": "three_days"
-      }
-    ],
-    "expected": {
-      "reply_example": "已保存三天罗马行程和两人预算，并列出了仍需确认的信息。",
-      "artifact_expectations": "Interpret Chinese requirements and follow-ups without dropping constraints. Use actual first-generation output in the following turn, not a reseeded reference plan."
-    },
-    "rubric": [
-      {
-        "id": "L01-R1",
-        "criterion": "The first turn correctly interprets the Chinese dates, two-adult party, EUR800 total flight-excluded limit, history/food and moderate pace, and saves a complete itinerary with specific meals, local clock schedule, both nights and applicable researched prices. Reply in appropriate clear Chinese."
-      },
-      {
-        "id": "L01-R2",
-        "criterion": "The follow-up leaves day-two afternoon free and preserves unrelated day-one/day-three arrangements and earlier requirements, correcting only genuine dependent facts and prices. It does not treat the latest change as permission to discard earlier constraints."
-      },
-      {
-        "id": "L01-R3",
-        "criterion": "Both turns distinguish saved versus unconfirmed work, real evidence versus estimates, and actual bookings versus suggestions. No invented source, price, venue or route check."
-      }
-    ],
-    "followUps": [
-      {
-        "prompt": "第二天下午全部留给我们自己安排，别动第一天和第三天。预算如果需要调整就只改相关部分。",
-        "assertions": [
-          {
-            "type": "final_receipt"
-          }
-        ]
       }
     ]
   },
@@ -380,46 +95,6 @@
       "artifact_expectations": "The answer gives a useful comparison and does not present a saved trip."
     },
     "fault": "none"
-  },
-  {
-    "version": 1,
-    "id": "F01",
-    "category": "follow_up",
-    "title": "Lighten one day",
-    "prompt": "Day two feels too busy. Keep the gallery but make the afternoon more relaxed.",
-    "fixture": "rome",
-    "research": "live",
-    "fault": "none",
-    "expected": {
-      "reply_example": "I saved a lighter second day, kept the gallery and made room to rest in the afternoon. I updated any affected costs.",
-      "artifact_expectations": "Keep Borghese Gallery and its identity. Reduce or reschedule optional afternoon sightseeing and make rest or free time explicit. Reconcile affected costs and days; preserve day one, day three, stay and unrelated costs."
-    },
-    "assertions": [
-      {
-        "type": "final_receipt"
-      },
-      {
-        "type": "valid_catalog_references"
-      },
-      {
-        "type": "preserve_item",
-        "id": "gallery"
-      }
-    ],
-    "rubric": [
-      {
-        "id": "F01-R1",
-        "criterion": "Keep Borghese Gallery and its identity. Reduce or reschedule optional afternoon sightseeing and make rest or free time explicit. Reconcile affected costs and days; preserve day one, day three, stay and unrelated costs."
-      },
-      {
-        "id": "F01-R2",
-        "criterion": "Preserve unrelated saved facts, identity, evidence and booking state except for changes genuinely required by this request."
-      },
-      {
-        "id": "F01-R3",
-        "criterion": "The traveller-facing reply accurately describes actual saved changes and material uncertainty without inventing sources or external actions."
-      }
-    ]
   },
   {
     "version": 1,
@@ -497,6 +172,46 @@
       },
       {
         "id": "F19-R3",
+        "criterion": "The traveller-facing reply accurately describes actual saved changes and material uncertainty without inventing sources or external actions."
+      }
+    ]
+  },
+  {
+    "version": 1,
+    "id": "F01",
+    "category": "follow_up",
+    "title": "Lighten one day",
+    "prompt": "Day two feels too busy. Keep the gallery but make the afternoon more relaxed.",
+    "fixture": "rome",
+    "research": "live",
+    "fault": "none",
+    "expected": {
+      "reply_example": "I saved a lighter second day, kept the gallery and made room to rest in the afternoon. I updated any affected costs.",
+      "artifact_expectations": "Keep Borghese Gallery and its identity. Reduce or reschedule optional afternoon sightseeing and make rest or free time explicit. Reconcile affected costs and days; preserve day one, day three, stay and unrelated costs."
+    },
+    "assertions": [
+      {
+        "type": "final_receipt"
+      },
+      {
+        "type": "valid_catalog_references"
+      },
+      {
+        "type": "preserve_item",
+        "id": "gallery"
+      }
+    ],
+    "rubric": [
+      {
+        "id": "F01-R1",
+        "criterion": "Keep Borghese Gallery and its identity. Reduce or reschedule optional afternoon sightseeing and make rest or free time explicit. Reconcile affected costs and days; preserve day one, day three, stay and unrelated costs."
+      },
+      {
+        "id": "F01-R2",
+        "criterion": "Preserve unrelated saved facts, identity, evidence and booking state except for changes genuinely required by this request."
+      },
+      {
+        "id": "F01-R3",
         "criterion": "The traveller-facing reply accurately describes actual saved changes and material uncertainty without inventing sources or external actions."
       }
     ]
@@ -730,6 +445,285 @@
       {
         "id": "R09-R2",
         "criterion": "The reply reports the actual verified save; it does not duplicate the edit or claim a missing in-flight receipt proves failure."
+      }
+    ]
+  },
+  {
+    "version": 1,
+    "id": "S01",
+    "category": "initial",
+    "title": "Initial draft through successive personalization",
+    "prompt": "Two adults in Rome, November 4 to 6, 2026. We like history and food, prefer a moderate pace, and have EUR 800 total excluding flights. Please create our plan.",
+    "fixture": "empty",
+    "research": "live",
+    "assertions": [
+      {
+        "type": "saved_plan"
+      },
+      {
+        "type": "saved_budget"
+      },
+      {
+        "type": "saved_brief"
+      },
+      {
+        "type": "three_days"
+      },
+      {
+        "type": "final_receipt"
+      },
+      {
+        "type": "brief_before_plan"
+      }
+    ],
+    "expected": {
+      "reply_example": "Saved the three-day Rome itinerary and the party estimate. Suggested times and unverified details remain labelled.",
+      "artifact_expectations": "Run all turns in the same project and conversation, using actual outputs from the preceding turn. Never reseed later steps with a reference itinerary."
+    },
+    "rubric": [
+      {
+        "id": "S01-R1",
+        "criterion": "Turn 1 saves a complete evidence-based three-day Rome itinerary and applicable priced budget for two with EUR 800 party limit and flight exclusion, specific meals, local clock schedule and both nights. Any unmet budget or route constraint is honest."
+      },
+      {
+        "id": "S01-R2",
+        "criterion": "Turn 2 updates the same requirements and applicable costs for four adults and vegetarian meals, without losing dates, history interests or the party-level spending limit. Suitable specific menus are supported or uncertain suitability is disclosed."
+      },
+      {
+        "id": "S01-R3",
+        "criterion": "Turn 3 frees day two afternoon without moving or deleting unrelated day-one/day-three arrangements; correct only necessary dependencies and preserve protected facts."
+      },
+      {
+        "id": "S01-R4",
+        "criterion": "Turn 4 changes only the spending limit and applicable brief reference. Existing plan, cost amounts and evidence dates stay intact."
+      },
+      {
+        "id": "S01-R5",
+        "criterion": "Turn 5 creates a useful Packing.md. Turn 6 updates that same document, retaining unrelated content and the trip. Turn 7 answers using actual current state without any save or invented change."
+      },
+      {
+        "id": "S01-R6",
+        "criterion": "Every turn reports its real save/evidence state. Later inputs do not silently erase earlier requirements. No full itinerary is duplicated in chat or the Travel brief; material research/decision files are preserved only when useful."
+      }
+    ],
+    "followUps": [
+      {
+        "prompt": "Two friends joined, so we are four adults now. We are all vegetarian. Adjust our meals and estimate, keeping the same dates and total spending limit.",
+        "assertions": [
+          {
+            "type": "saved_plan"
+          },
+          {
+            "type": "saved_budget"
+          },
+          {
+            "type": "budget_scope",
+            "scope": "party",
+            "travelers": 4,
+            "limit": 800
+          },
+          {
+            "type": "final_receipt"
+          }
+        ]
+      },
+      {
+        "prompt": "Keep all of day two afternoon free for us to explore on our own. Preserve day one and day three.",
+        "assertions": [
+          {
+            "type": "final_receipt"
+          }
+        ]
+      },
+      {
+        "prompt": "Our party spending limit is now EUR 1400. Change only that limit and the brief reference. Keep all arrangements and price estimates.",
+        "assertions": [
+          {
+            "type": "plan_unchanged"
+          },
+          {
+            "type": "budget_scope",
+            "scope": "party",
+            "travelers": 4,
+            "limit": 1400
+          },
+          {
+            "type": "final_receipt"
+          }
+        ]
+      },
+      {
+        "prompt": "Create Packing.md in the Library, including one light jacket as a suggestion. Do not change the trip or budget.",
+        "assertions": [
+          {
+            "type": "document_count",
+            "name": "Packing.md",
+            "count": 1
+          },
+          {
+            "type": "plan_budget_unchanged"
+          },
+          {
+            "type": "final_receipt"
+          }
+        ]
+      },
+      {
+        "prompt": "In Packing.md replace the light jacket suggestion with a rain layer suggestion. Keep all other content and the trip unchanged.",
+        "assertions": [
+          {
+            "type": "document_updated",
+            "name": "Packing.md"
+          },
+          {
+            "type": "document_count",
+            "name": "Packing.md",
+            "count": 1
+          },
+          {
+            "type": "plan_budget_unchanged"
+          },
+          {
+            "type": "final_receipt"
+          }
+        ]
+      },
+      {
+        "prompt": "Without changing anything, summarize our current group, dates, dietary needs, spending limit and which afternoon is free.",
+        "assertions": [
+          {
+            "type": "unchanged_artifacts"
+          },
+          {
+            "type": "no_mutations"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "version": 1,
+    "id": "S02",
+    "category": "follow_up",
+    "title": "Research and decisions survive a later edit",
+    "prompt": "Compare central Rome and Trastevere as a base using research. Save useful findings in Research notes.md and the main tradeoff in Planning decisions.md. These are supporting files only; keep my itinerary and Budget unchanged.",
+    "fixture": "rome",
+    "research": "live",
+    "assertions": [
+      {
+        "type": "document_count",
+        "name": "Research notes.md",
+        "count": 1
+      },
+      {
+        "type": "document_count",
+        "name": "Planning decisions.md",
+        "count": 1
+      },
+      {
+        "type": "plan_budget_unchanged"
+      },
+      {
+        "type": "final_receipt"
+      }
+    ],
+    "expected": {
+      "reply_example": "Saved the research findings and base tradeoff in two Library files. The itinerary and Budget are unchanged.",
+      "artifact_expectations": "Supporting files retain distinct ownership and document identities across a real follow-up."
+    },
+    "rubric": [
+      {
+        "id": "S02-R1",
+        "criterion": "Turn 1 researches actual evidence, records URLs, checked dates and applicability in Research notes.md, and concise base tradeoffs in Planning decisions.md. No duplicate cost ledger, requirements list or itinerary is maintained."
+      },
+      {
+        "id": "S02-R2",
+        "criterion": "Turn 2 reads and updates the existing Planning decisions document in place, records the user choice of central Rome, preserves unrelated content and original research checked dates unless actually revisited, and does not duplicate either file."
+      },
+      {
+        "id": "S02-R3",
+        "criterion": "Both turns preserve Plan and Budget and report only receipt-backed document saves. A prior file listing alone is not a content read."
+      }
+    ],
+    "followUps": [
+      {
+        "prompt": "We choose central Rome for easier access to the historic center. Read our existing supporting notes and update Planning decisions.md with that choice. Keep Research notes.md, the trip and prices as they are.",
+        "assertions": [
+          {
+            "type": "document_updated",
+            "name": "Planning decisions.md"
+          },
+          {
+            "type": "document_count",
+            "name": "Research notes.md",
+            "count": 1
+          },
+          {
+            "type": "document_count",
+            "name": "Planning decisions.md",
+            "count": 1
+          },
+          {
+            "type": "plan_budget_unchanged"
+          },
+          {
+            "type": "final_receipt"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "version": 1,
+    "id": "L01",
+    "category": "initial",
+    "title": "Chinese initial request and successive correction",
+    "fixture": "empty",
+    "research": "live",
+    "prompt": "我们两位成人，2026年11月4日至6日在罗马，喜欢历史和当地美食，节奏适中。总预算800欧元，不含往返意大利机票。请生成行程。",
+    "assertions": [
+      {
+        "type": "saved_plan"
+      },
+      {
+        "type": "saved_budget"
+      },
+      {
+        "type": "saved_brief"
+      },
+      {
+        "type": "final_receipt"
+      },
+      {
+        "type": "three_days"
+      }
+    ],
+    "expected": {
+      "reply_example": "已保存三天罗马行程和两人预算，并列出了仍需确认的信息。",
+      "artifact_expectations": "Interpret Chinese requirements and follow-ups without dropping constraints. Use actual first-generation output in the following turn, not a reseeded reference plan."
+    },
+    "rubric": [
+      {
+        "id": "L01-R1",
+        "criterion": "The first turn correctly interprets the Chinese dates, two-adult party, EUR800 total flight-excluded limit, history/food and moderate pace, and saves a complete itinerary with specific meals, local clock schedule, both nights and applicable researched prices. Reply in appropriate clear Chinese."
+      },
+      {
+        "id": "L01-R2",
+        "criterion": "The follow-up leaves day-two afternoon free and preserves unrelated day-one/day-three arrangements and earlier requirements, correcting only genuine dependent facts and prices. It does not treat the latest change as permission to discard earlier constraints."
+      },
+      {
+        "id": "L01-R3",
+        "criterion": "Both turns distinguish saved versus unconfirmed work, real evidence versus estimates, and actual bookings versus suggestions. No invented source, price, venue or route check."
+      }
+    ],
+    "followUps": [
+      {
+        "prompt": "第二天下午全部留给我们自己安排，别动第一天和第三天。预算如果需要调整就只改相关部分。",
+        "assertions": [
+          {
+            "type": "final_receipt"
+          }
+        ]
       }
     ]
   },

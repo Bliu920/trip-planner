@@ -36,10 +36,7 @@ export function resolveLocation(
   location: Location | null,
   seen: string[] = [],
 ): Exclude<Location, { type: "item" | "travel_endpoint" }> | null {
-  if (
-    !location ||
-    (location.type !== "item" && location.type !== "travel_endpoint")
-  )
+  if (!location || (location.type !== "item" && location.type !== "travel_endpoint"))
     return location;
   if (seen.includes(location.itemId))
     throw new Error("These locations depend on each other. Set a place for one of them.");
@@ -53,8 +50,7 @@ export function resolveLocation(
       : item.kind === "travel"
         ? item[location.endpoint]
         : null;
-  if (!target)
-    throw new Error("The referenced arrangement has no matching location.");
+  if (!target) throw new Error("The referenced arrangement has no matching location.");
   return resolveLocation(plan, target, [...seen, item.id]);
 }
 export function itemTiming(item: PlanItem): ActivityTiming | null {
@@ -71,9 +67,7 @@ export function fixedPoints(item: PlanItem): TimePoint[] {
   if (item.kind === "travel" && item.timing.type !== "interval")
     return item.timing.at.binding === "fixed" ? [item.timing.at] : [];
   const timing = itemTiming(item);
-  return [timing?.start, timing?.end].filter(
-    (p): p is TimePoint => !!p && p.binding === "fixed",
-  );
+  return [timing?.start, timing?.end].filter((p): p is TimePoint => !!p && p.binding === "fixed");
 }
 export function sourcesIn(value: unknown): SourceRef[] {
   const found: SourceRef[] = [];
@@ -84,8 +78,7 @@ export function sourcesIn(value: unknown): SourceRef[] {
       return;
     }
     const object = v as Record<string, unknown>;
-    if (Array.isArray(object.sources))
-      found.push(...(object.sources as SourceRef[]));
+    if (Array.isArray(object.sources)) found.push(...(object.sources as SourceRef[]));
     Object.entries(object)
       .filter(([key]) => key !== "sources")
       .forEach(([, child]) => walk(child));
@@ -98,10 +91,18 @@ function equal(a: unknown, b: unknown): boolean {
   if (a === b) return true;
   if (!a || !b || typeof a !== "object" || typeof b !== "object") return false;
   if (Array.isArray(a) || Array.isArray(b))
-    return Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((value, index) => equal(value, b[index]));
-  const left = a as Record<string, unknown>, right = b as Record<string, unknown>;
-  return Object.keys(left).length === Object.keys(right).length &&
-    Object.keys(left).every(key => Object.hasOwn(right, key) && equal(left[key], right[key]));
+    return (
+      Array.isArray(a) &&
+      Array.isArray(b) &&
+      a.length === b.length &&
+      a.every((value, index) => equal(value, b[index]))
+    );
+  const left = a as Record<string, unknown>,
+    right = b as Record<string, unknown>;
+  return (
+    Object.keys(left).length === Object.keys(right).length &&
+    Object.keys(left).every((key) => Object.hasOwn(right, key) && equal(left[key], right[key]))
+  );
 }
 export function inspectPlan(
   value: unknown,
@@ -130,7 +131,8 @@ export function inspectPlan(
   ) => findings.push({ code, severity, itemIds, message });
   const catalog = new Map(places.map((p) => [p.id, p]));
   const dayIds = plan.days.map((d) => d.id);
-  if (new Set(dayIds).size !== 3) add("days", "The plan contains a duplicate day. Reload the plan before editing.");
+  if (new Set(dayIds).size !== 3)
+    add("days", "The plan contains a duplicate day. Reload the plan before editing.");
   const membership = new Map<string, number>();
   function location(loc: Location | null, itemIds: string[]) {
     try {
@@ -149,30 +151,23 @@ export function inspectPlan(
         add("reference", "A day references a missing item.", [id]);
         continue;
       }
-      if (membership.has(id))
-        add("duplicate", "An arrangement can appear in only one day.", [id]);
+      if (membership.has(id)) add("duplicate", "An arrangement can appear in only one day.", [id]);
       membership.set(id, index);
       if (plan.items[id].kind === "stay")
         add("stay", "Accommodation is not an all-day activity.", [id]);
     }
   }
   for (const [id, item] of Object.entries(plan.items)) {
-    if (id !== item.id) add("identity", "An activity could not be matched to the plan. Reload before editing.", [id]);
+    if (id !== item.id)
+      add("identity", "An activity could not be matched to the plan. Reload before editing.", [id]);
     if (item.keep && item.keep.basis.kind !== "user")
       add("source", "Keeping an arrangement requires a user source.", [id]);
     if (item.reservation && item.reservation.basis.kind !== "user")
       add("source", "Reservations require user evidence.", [id]);
     if (item.optional && (item.keep || item.reservation?.state === "booked"))
       add("optional", "Booked or kept arrangements cannot be optional.", [id]);
-    if (
-      ["rest", "free_time", "logistics"].includes(item.kind) &&
-      item.reservation
-    )
-      add(
-        "reservation",
-        "Record the reservation on the booked visit, meal, travel or stay.",
-        [id],
-      );
+    if (["rest", "free_time", "logistics"].includes(item.kind) && item.reservation)
+      add("reservation", "Record the reservation on the booked visit, meal, travel or stay.", [id]);
     if (item.kind === "travel") {
       location(item.from, [id]);
       location(item.to, [id]);
@@ -189,57 +184,59 @@ export function inspectPlan(
           !(item.kind === "meal" && (loc.type === "area" || loc.type === "restaurant")) &&
           (loc.type !== "specified" || loc.basis.kind !== "user")
         )
+          add("catalog", "Choose a place from Explore or one you have provided.", [id]);
+        if (
+          (loc?.type === "restaurant" && item.kind !== "meal") ||
+          (loc?.type === "hotel" && !["stay", "rest", "free_time", "logistics"].includes(item.kind))
+        )
           add(
-            "catalog",
-            "Choose a place from Explore or one you have provided.",
+            "restaurant_use",
+            "Use restaurants for meals and hotels for lodging, rest or practical arrangements.",
             [id],
           );
-        if ((loc?.type === "restaurant" && item.kind !== "meal") || (loc?.type === "hotel" && item.kind !== "stay"))
-          add("restaurant_use", "Use a restaurant for meals and a hotel for overnight stays.", [id]);
         if (item.kind === "meal") {
           const place = loc?.type === "catalog" ? catalog.get(loc.placeId) : null;
-          const concrete = loc?.type === "restaurant" ||
-            (place && (["restaurant", "cafe"].includes(place.type) || place.type === "market" && place.tags.includes("food"))) ||
+          const concrete =
+            loc?.type === "restaurant" ||
+            (place &&
+              (["restaurant", "cafe"].includes(place.type) ||
+                (place.type === "market" && place.tags.includes("food")))) ||
             ((loc?.type === "specified" || loc?.type === "area") && loc.basis.kind === "user");
           if (!concrete) {
             const old = previous?.items[id];
             let unchanged = false;
             try {
-              unchanged = old?.kind === "meal" &&
-                equal(resolveLocation(previous!, old.location), loc);
-            } catch { /* Broken older references do not excuse a new placeholder. */ }
-            add("meal_venue", unchanged
-              ? "This meal still needs a specific place to eat."
-              : "Choose a specific restaurant or cafe for this meal, with a source for any newly researched place.",
-            [id], unchanged ? "warning" : "error");
+              unchanged =
+                old?.kind === "meal" && equal(resolveLocation(previous!, old.location), loc);
+            } catch {
+              /* Broken older references do not excuse a new placeholder. */
+            }
+            add(
+              "meal_venue",
+              unchanged
+                ? "This meal still needs a specific place to eat."
+                : "Choose a specific restaurant or cafe for this meal, with a source for any newly researched place.",
+              [id],
+              unchanged ? "warning" : "error",
+            );
           }
         }
-        if (item.kind === "stay" && loc?.type === "catalog" && catalog.get(loc.placeId)?.type !== "hotel")
-          add("stay_source", "Choose a researched hotel, a property you provided, or a proposed accommodation area.", [id]);
         if (
           item.kind === "stay" &&
-          loc?.type === "specified" &&
-          loc.basis.kind !== "user"
+          loc?.type === "catalog" &&
+          catalog.get(loc.placeId)?.type !== "hotel"
         )
-          add("stay_source", "Use a user-provided hotel or a proposed area.", [
-            id,
-          ]);
+          add(
+            "stay_source",
+            "Choose a researched hotel, a property you provided, or a proposed accommodation area.",
+            [id],
+          );
+        if (item.kind === "stay" && loc?.type === "specified" && loc.basis.kind !== "user")
+          add("stay_source", "Use a user-provided hotel or a proposed area.", [id]);
         if (loc?.type === "catalog") {
           const place = catalog.get(loc.placeId);
           if (place?.hours === null)
-            add(
-              "hours",
-              "Opening hours are unknown. Confirm before visiting.",
-              [id],
-              "warning",
-            );
-          if (place?.booking_required && item.reservation?.state !== "booked")
-            add(
-              "booking",
-              "Booking is required. Availability has not been checked.",
-              [id],
-              "warning",
-            );
+            add("hours", "Opening hours are unknown. Confirm before visiting.", [id], "warning");
         }
       } catch {
         /* The location check reports invalid references. */
@@ -248,8 +245,7 @@ export function inspectPlan(
     if (item.kind === "stay") {
       if (
         item.coverage?.type === "nights" &&
-        (new Set(item.coverage.afterDayIds).size !==
-          item.coverage.afterDayIds.length ||
+        (new Set(item.coverage.afterDayIds).size !== item.coverage.afterDayIds.length ||
           item.coverage.afterDayIds.some((d) => !dayIds.includes(d)))
       )
         add("nights", "Stay nights must reference unique existing days.", [id]);
@@ -266,36 +262,22 @@ export function inspectPlan(
     const timing = itemTiming(item);
     const start =
       timing?.start ??
-      (item.kind === "travel" && item.timing.type !== "interval"
-        ? item.timing.at
-        : null);
-    if (
-      index !== undefined &&
-      start?.date &&
-      start.date !== dayDate(plan, index)
-    )
+      (item.kind === "travel" && item.timing.type !== "interval" ? item.timing.at : null);
+    if (index !== undefined && start?.date && start.date !== dayDate(plan, index))
       add(
         "date_membership",
         "This dated arrangement belongs on its actual date, or in unscheduled arrangements.",
         [id],
       );
     if (index === undefined)
-      add(
-        "unscheduled",
-        "This arrangement has not been assigned to a day.",
-        [id],
-        "warning",
-      );
+      add("unscheduled", "This arrangement has not been assigned to a day.", [id], "warning");
     if (timing?.start?.time && timing.end?.time) {
-      const startDate =
-        timing.start.date ??
-        (index === undefined ? null : dayDate(plan, index));
+      const startDate = timing.start.date ?? (index === undefined ? null : dayDate(plan, index));
       const endDate = timing.end.date ?? startDate;
       if (
         (startDate &&
           endDate &&
-          `${endDate}T${timing.end.time}` <=
-            `${startDate}T${timing.start.time}`) ||
+          `${endDate}T${timing.end.time}` <= `${startDate}T${timing.start.time}`) ||
         ((!startDate || !endDate) && timing.end.time <= timing.start.time)
       )
         add(
@@ -316,13 +298,26 @@ export function inspectPlan(
   for (const day of plan.days) {
     let minimum = 0;
     const intervals: { id: string; start: number; end: number }[] = [];
+    let previousStart: { id: string; start: number } | null = null;
     for (const id of day.itemIds) {
       const item = plan.items[id];
       if (!item) continue;
       const timing = itemTiming(item);
-      if (timing?.duration && !item.optional)
-        minimum += timing.duration.minMinutes;
-      const window = activityWindow(item, dayDate(plan, plan.days.indexOf(day)), plan.days.indexOf(day));
+      if (timing?.duration && !item.optional) minimum += timing.duration.minMinutes;
+      const window = activityWindow(
+        item,
+        dayDate(plan, plan.days.indexOf(day)),
+        plan.days.indexOf(day),
+      );
+      if (window.start !== null) {
+        if (previousStart && window.start < previousStart.start)
+          add(
+            "sequence",
+            "The displayed order runs backwards in time. Reorder these arrangements or correct their start times.",
+            [previousStart.id, id],
+          );
+        previousStart = { id, start: window.start };
+      }
       if (window.start !== null && window.end !== null && window.end > window.start) {
         intervals.push({ id, start: window.start, end: window.end });
         if (!timing?.duration && !item.optional) minimum += window.end - window.start;
@@ -342,9 +337,7 @@ export function inspectPlan(
         if (first.start < second.end && second.start < first.end) {
           const ids = [first.id, second.id];
           const acknowledged = plan.notes.some(
-            (n) =>
-              n.kind === "conflict" &&
-              ids.every((id) => n.relatedItemIds.includes(id)),
+            (n) => n.kind === "conflict" && ids.every((id) => n.relatedItemIds.includes(id)),
           );
           add(
             "overlap",
@@ -357,11 +350,7 @@ export function inspectPlan(
   }
   for (const note of plan.notes)
     if (note.relatedItemIds.some((id) => !plan.items[id]))
-      add(
-        "note_reference",
-        "A note references a missing arrangement.",
-        note.relatedItemIds,
-      );
+      add("note_reference", "A note references a missing arrangement.", note.relatedItemIds);
   if (new Set(plan.notes.map((n) => n.id)).size !== plan.notes.length)
     add("notes", "The plan contains a duplicate note. Reload before editing.");
   for (const source of sourcesIn(plan))
@@ -380,10 +369,8 @@ export function inspectPlan(
         );
       continue;
     }
-    const oldLocation =
-      old.kind === "travel" ? [old.from, old.to] : old.location;
-    const newLocation =
-      next.kind === "travel" ? [next.from, next.to] : next.location;
+    const oldLocation = old.kind === "travel" ? [old.from, old.to] : old.location;
+    const newLocation = next.kind === "travel" ? [next.from, next.to] : next.location;
     const oldDay = previous?.days.findIndex((d) => d.itemIds.includes(old.id));
     const newDay = plan.days.findIndex((d) => d.itemIds.includes(old.id));
     const relativeMoved =
@@ -398,22 +385,25 @@ export function inspectPlan(
       old.reservation?.state === "booked" &&
       (!equal(old.reservation, next.reservation) ||
         !equal(oldLocation, newLocation) ||
-        (old.kind === "stay" &&
-          next.kind === "stay" &&
-          !equal(old.coverage, next.coverage)));
+        (old.kind === "stay" && next.kind === "stay" && !equal(old.coverage, next.coverage)));
     if (
       !authorized &&
-      (old.kind !== next.kind ||
+      ((old.kind !== next.kind &&
+        (old.kind === "stay" ||
+          old.kind === "travel" ||
+          next.kind === "stay" ||
+          next.kind === "travel" ||
+          !!old.keep ||
+          old.reservation?.state === "booked" ||
+          fixedPoints(old).length > 0)) ||
         !equal(fixedPoints(old), fixedPoints(next)) ||
         relativeMoved ||
         bookingChanged ||
         (old.keep && (!next.keep || !equal(oldLocation, newLocation))))
     )
-      add(
-        "protected",
-        "Changing this protected fact requires an explicit current user source.",
-        [old.id],
-      );
+      add("protected", "Changing this protected fact requires an explicit current user source.", [
+        old.id,
+      ]);
   }
   for (const note of previous?.notes ?? [])
     if (

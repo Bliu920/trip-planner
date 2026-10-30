@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import photos from "../data/place-photos.json";
-import { photoManifestSchema } from "../services/catalog/validation";
+import { photoManifestSchema } from "../services/places/catalog/validation";
 import { syncPhotos } from "../scripts/catalog/sync";
 
 test("photo-only updates write changed enrichment and verify it without touching places", async () => {

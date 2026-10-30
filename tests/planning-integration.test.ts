@@ -1,3 +1,4 @@
+import { planHeader, visitCommand, budgetSettings, unpricedStay, offlineDraftCalls, reviewBudget } from "./authoring-fixture";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { before, beforeEach, after, afterEach, test } from "node:test";
@@ -12,9 +13,10 @@ import {
   conversation,
   generation,
 } from "./chat-fixture";
-import { setToolRequest, examplePlan, functionStream, unknownBudget, fixturePricedBudget, researchResponse } from "./plan-fixture";
+import { examplePlan, functionStream, unknownBudget, fixturePricedBudget, researchResponse } from "./plan-fixture";
 import { openSession } from "../services/workspace";
 import { getPlan, savePlan } from "../services/plans";
+import { getBudget } from "../services/budgets";
 import {
   prepareDocument,
   publishDocument,
@@ -24,13 +26,228 @@ import {
   beginTurn,
   saveReply,
   loadConversation,
-} from "../services/conversations";
-import { handleChat } from "../services/chat";
+} from "../services/assistant/conversation-store";
+import { handleChat } from "../services/assistant";
+import { MAX_AGENT_STEPS, RECOVERY_STEPS } from "../services/assistant/agent";
 import { budgetTotals } from "../lib/budget";
+function sourceHandle(body: { input: { type?: string; output?: string }[] }, url = "https://example.com/test-rate") {
+  for (const item of [...body.input].reverse()) if (item.type === "function_call_output") {
+    const sources = JSON.parse(item.output!).data?.sources as { url?: string; sourceId?: string }[] | undefined;
+    const source = sources?.find(source => source.url === url && source.sourceId);
+    if (source?.sourceId) return source.sourceId;
+  }
+  throw new Error("Expected a host-issued evidence handle in a real tool result.");
+}
 let db: PGlite;
 let files: Map<string, string>;
 let provider: typeof fetch;
 const oldFetch = globalThis.fetch;
+test("public authoring commands construct and save sourced days, hotel and costs without fixture argument repair", async () => {
+  process.env.AGENT_WEB_SEARCH = "true";
+  let call = 0, sourceId = "", latestOutput = "";
+  const evidence = () => ({ sourceId, detail: "Fixture: lodging 50 to 80 per person-night; meals 30 to 45 per person-day; transit 5 to 10 per day; visits 20 to 25." });
+  provider = async (_url, init) => {
+    const body = JSON.parse(String(init?.body));
+    if (body.stream !== true) return researchResponse("Fictional Hotel and Cafe, 1 Fictional Street, Rome. Synthetic identity and rates: lodging EUR 50 to 80 per person-night; meals 30 to 45 per person-day; transit 5 to 10; visits 20 to 25.");
+    assert.doesNotMatch(JSON.stringify(body), /\"editToken\"/);
+    for (const part of body.input) {
+      if (part.type === "function_call") assert.equal("editToken" in JSON.parse(part.arguments), false, "Host fields must not leak through normalized SDK call history.");
+      if (part.type === "function_call_output") assert.doesNotMatch(part.output, /"editToken"/);
+    }
+    assert.ok(!body.tools.some((tool: { name?: string }) => tool.name === "addDayActivities"), "The public registry has no overlapping add-only helper.");
+    call++;
+    const instructions = String(body.instructions ?? body.input.filter((p: { role?: string }) => ["system", "developer"].includes(p.role ?? "")).map((p: { content: string | { text?: string }[] }) => typeof p.content === "string" ? p.content : p.content.map(part => part.text ?? "").join("")).join("\n"));
+    if (body.tool_choice === "none") {
+      assert.equal(body.reasoning.effort, "low", "Final acknowledgment does not repeat planning reasoning.");
+      assert.match(instructions, /Verified current-request publication:/);
+      assert.match(instructions, /These changes ARE SAVED/);
+      assert.match(instructions, /Authoritative saved budget:/);
+      assert.match(instructions, /Execution has ended; tools are intentionally disabled/);
+      assert.doesNotMatch(instructions, /You have access to the application's plan|Workflow:|Next required work:|Run allowance:/);
+      const closingInput = body.input.filter((part: { role?: string }) => part.role === "user");
+      assert.equal(closingInput.length, 1);
+      assert.match(JSON.stringify(closingInput), /already been processed; it is context for this report, not a new task/);
+      assert.equal(body.input.some((part: { type?: string }) => part.type === "function_call_output"), false);
+      return providerStream();
+    }
+    assert.equal(body.reasoning.effort, call <= 2 || call >= 9 ? "medium" : "low", "Actual Responses effort follows initial judgment, assembly/pricing and review phases.");
+    assert.equal(body.store, false);
+    assert.ok(body.tools.filter((t: { name?: string }) => ["createPlan", "editPlan", "createBudget", "editBudget", "commit"].includes(t.name ?? "")).every((t: { parameters: unknown }) => !JSON.stringify(t.parameters).includes("editToken")));
+    const last = body.input.filter((p: { type: string }) => p.type === "function_call_output").at(-1);
+    latestOutput = last?.output ?? "";
+    if (last) assert.equal(JSON.parse(last.output).outcome, "succeeded", last.output);
+    if (call === 1) return functionStream("researchWeb", { query: "Synthetic hotel, cafe and applicable rates." });
+    if (call === 2) { sourceId = JSON.parse(last.output).data.sources[0].sourceId; assert.ok(sourceId); return functionStream("createPlan", { plan: { startDate: null, days: [{ id: "day-1", title: "Art" }, { id: "day-2", title: "Food" }, { id: "day-3", title: "Gardens" }] } }); }
+    if (call === 3) return functionStream("editPlan", { operations: [{ type: "addStay", id: "hotel", afterDayIds: ["day-1", "day-2"], hotel: { name: "Fictional Hotel", address: "1 Fictional Street", city: "Rome", sourceId } }] });
+    if (call >= 4 && call <= 6) {
+      const day = call - 3;
+      return functionStream("editPlan", { operations: [
+        { type: "addActivity", dayId: `day-${day}`, id: `visit-${day}`, title: "Visit the supplied sight", placeId: "place_001", startTime: "09:00" },
+        { type: "addActivity", dayId: `day-${day}`, id: `meal-${day}`, title: "Lunch at Fictional Cafe", kind: "meal", startTime: "12:00", durationMinutes: 60, venue: { name: "Fictional Cafe", address: "1 Fictional Street", city: "Rome", sourceId } },
+        { type: "addActivity", dayId: `day-${day}`, id: `rest-${day}`, title: "Afternoon rest", kind: "rest", locationItemId: "hotel", startTime: "14:00", durationMinutes: 60 },
+      ] });
+    }
+    if (call === 7) return functionStream("createBudget", { budget: { currency: "EUR", scope: "per_person", travelers: 2, limit: 600, assumptions: "Shared room.", exclusions: ["International travel"] } });
+    if (call === 8) return functionStream("editBudget", { operations: [
+      { type: "addCost", id: "stay", label: "Two nights", category: "stay", planItemIds: ["hotel"], unit: "person-night", quantity: 2, min: 50, max: 80, priceScope: "per_person", assumptions: "Synthetic shared-room rate.", sources: [evidence()] },
+      { type: "addCost", id: "food", label: "Three days of meals", category: "food", planItemIds: ["meal-1", "meal-2", "meal-3"], unit: "person-day", quantity: 3, min: 30, max: 45, priceScope: "per_person", assumptions: "Synthetic meal allowance.", sources: [evidence()] },
+      { type: "addCost", id: "transport", label: "Local transport", category: "transport", planItemIds: [], unit: "person-day", quantity: 3, min: 5, max: 10, priceScope: "per_person", assumptions: "Synthetic transit allowance.", sources: [evidence()] },
+      { type: "addCost", id: "visits", label: "Admissions", category: "activities", planItemIds: ["visit-1", "visit-2", "visit-3"], unit: "person-admission", quantity: 3, min: 20, max: 25, priceScope: "per_person", assumptions: "Synthetic ticket range.", sources: [evidence()] },
+      { type: "review" },
+    ] });
+    if (call === 9) return functionStream("inspectChanges", {});
+    if (call === 10) { assert.deepEqual(JSON.parse(last.output).data.blockers, []); return functionStream("commit", { summary: "Complete fixture assembled with the public authoring protocol", handledInputIds: [] }); }
+    assert.match(instructions, /Verified current-request publication:/);
+    assert.match(instructions, /These changes ARE SAVED/);
+    assert.match(instructions, /Authoritative saved budget:/);
+    assert.match(instructions, /Use these exact host-calculated totals/);
+    assert.doesNotMatch(instructions, /Next required work:|Run allowance:/);
+    assert.equal(body.tool_choice, "none");
+    return providerStream();
+  };
+  const response = await handleChat(new Request(`http://localhost/api/trips/${reference}/chat`, {
+    method: "POST", headers: { "Content-Type": "application/json", origin: "http://localhost" }, body: JSON.stringify({ conversationId: conversation, expectedLastId: null, retry: false, message: { id: "authoring-user", text: "Plan three days with hotel, food and costs." } }),
+  }), reference);
+  await response.text();
+  assert.equal(call, 11, latestOutput);
+  const saved = (await getPlan(reference)).plan!;
+  assert.ok(saved);
+  assert.deepEqual(saved.days.map(d => d.itemIds.length), [3, 3, 3]);
+  assert.equal(saved.items.hotel.kind, "stay");
+  const visit = saved.items["visit-1"];
+  if (visit.kind !== "visit") throw new Error("Fixture visit missing");
+  assert.equal(visit.timing.duration!.minMinutes, 120);
+  assert.equal(visit.timing.duration!.basis.kind, "catalog");
+  assert.equal(visit.timing.start!.time, "09:00");
+  assert.deepEqual(budgetTotals((await getBudget(reference)).budget!), { min: 265, max: 400, confirmed: 0, priced: 4, unknown: 0 });
+  assert.equal((await loadConversation(reference, conversation)).messages.at(-1)?.metadata?.status, "complete");
+});
+test("corrected Plan inputs are resolved and an empty Budget remains the persisted save blocker", async () => {
+  let call = 0;
+  const p = examplePlan();
+  const lines: string[] = [], info = console.info;
+  console.info = (...args: unknown[]) => { lines.push(args.map(String).join(" ")); };
+  try {
+    provider = async () => {
+      call++;
+      if (call === 1) return functionStream("createPlan", { plan: { startDate: null, days: p.days.map(({ id, title }) => ({ id, title })) } });
+      if (call === 2) return functionStream("editPlan", { operations: [visitCommand] });
+      if (call === 3) return functionStream("editPlan", { operations: [{ type: "updateActivity", id: "visit-1", changes: { reason: 123 } }] });
+      if (call === 4) return functionStream("editPlan", { operations: [{ type: "updateActivity", id: "visit-1", changes: { reason: "A corrected local change." } }] });
+      if (call === 5) return functionStream("createBudget", { budget: { currency: "EUR", scope: "per_person", travelers: 2, limit: 600, assumptions: "Shared room.", exclusions: [] } });
+      if (call === 6) return functionStream("commit", { summary: "Attempted incomplete budget", handledInputIds: [] });
+      return providerStream();
+    };
+    const response = await handleChat(new Request(`http://localhost/api/trips/${reference}/chat`, {
+      method: "POST", headers: { "Content-Type": "application/json", origin: "http://localhost" },
+      body: JSON.stringify({ conversationId: conversation, expectedLastId: null, retry: false, message: { id: "report-user", text: "Plan a trip with a complete budget." } }),
+    }), reference);
+    await response.text();
+    const reply = (await loadConversation(reference, conversation)).messages.at(-1)!;
+    const report = reply.parts.find(part => part.type === "data-failure")?.data;
+    assert.equal(report?.code, "incomplete");
+    assert.equal(report?.blocker, "budget_empty");
+    assert.equal(report?.termination?.kind, "tool_choice");
+    assert.equal(report?.inputFailure, undefined, "A corrected input error is history, not the current blocker.");
+    assert.deepEqual(report?.progress, { hasPlan: true, hasBudget: true, planItems: 1, scheduledItems: 1, populatedDays: 1, budgetEntries: 0, pricedEntries: 0 });
+    assert.equal(reply.parts.find(part => part.type === "data-action")?.data.code, "BUDGET_EMPTY");
+    assert.ok(JSON.stringify(report).length < 1000);
+    assert.equal((await getPlan(reference)).plan, null);
+    const { replyFailureMessage } = await import("../lib/chat/failure");
+    assert.match(replyFailureMessage(reply), /before adding costs/);
+    const events = lines.flatMap(line => { try { return [JSON.parse(line)]; } catch { return []; } });
+    assert.ok(events.some(e => e.event === "agent_input_corrected" && e.toolName === "editPlan"));
+    assert.ok(events.some(e => e.event === "agent_step_finished" && e.tools.some((t: { code: string }) => t.code === "BUDGET_EMPTY") && e.progress.budgetEntries === 0));
+    assert.doesNotMatch(lines.join("\n"), /A corrected local change|report-user|Shared room/);
+  } finally { console.info = info; }
+});
+test("SDK assembles initial days and costs incrementally, repairs one batch and publishes once", async () => {
+  process.env.AGENT_WEB_SEARCH = "true";
+  const p = examplePlan();
+  const costs: import("../services/assistant/agent/authoring").BudgetCommand[] = [];
+  let calls = 0, researchCalls = 0;
+  let sourceId = "";
+  const outputs = (body: { input: { type?: string; output?: string }[] }) => body.input.filter(part => part.type === "function_call_output").map(part => JSON.parse(part.output!));
+  provider = async (_url, init) => {
+    const body = JSON.parse(String(init?.body));
+    if (body.stream !== true) {
+      researchCalls++;
+      return researchResponse("Synthetic fixture evidence: Fictional Hotel and Fictional Cafe A, 1 Fictional Street, Rome. Shared lodging EUR 40 to 60 per person-night, meals EUR 20 to 30, admission EUR 10 to 20. Not real quotes.");
+    }
+    calls++;
+    const results = outputs(body), latest = results.at(-1);
+    if (calls > 1 && calls !== 8 && body.tool_choice !== "none") assert.equal(latest.outcome, "succeeded", JSON.stringify(latest));
+    if (calls < 17) {
+      assert.equal((await getPlan(reference)).plan, null, "Only the final commit publishes the itinerary.");
+      assert.equal((await db.query("select * from public.budgets")).rows.length, 0);
+    }
+    if (calls === 1) return functionStream("saveBrief", { markdown: "# Preferences\nArt and relaxed meals.\n# Budget\nEUR 600 per person.\n# Group\nTwo adults sharing a room.", expectedRevision: 0 });
+    if (calls === 2) return functionStream("createPlan", { plan: { startDate: null, days: p.days.map(({ id, title }) => ({ id, title })) } });
+    if (calls === 3) {
+      assert.match(latest.message, /Empty itinerary initialized/);
+      return functionStream("researchWeb", { query: "Find named Rome lodging, a lunch venue and representative prices for this synthetic test." });
+    }
+    if (calls === 4) {
+      sourceId = latest.data.sources[0].sourceId;
+      assert.ok(sourceId);
+      for (let day = 1; day <= 3; day++) for (const [category, itemId, min, max] of [["food", `meal-${day}`, 20, 30], ["activities", `visit-${day}`, 10, 20]] as const) {
+        costs.push({ type: "addCost", id: `${category}-${day}`, label: `${category} day ${day}`, category, planItemIds: [itemId], quantity: 1, unit: "person", min, max, priceScope: "per_person", pricing: "estimated",
+          assumptions: "Synthetic fixture rate, not a real quote.", sources: [{ sourceId, detail: "Synthetic fixture prices." }] });
+      }
+      return functionStream("editPlan", { operations: [{ type: "addStay", id: "stay", afterDayIds: ["day-1", "day-2"], hotel: { name: "Fictional Hotel", address: "1 Fictional Street", city: "Rome", sourceId } }] });
+    }
+    const dayBatch = (day: number) => [
+      { ...visitCommand, id: `visit-${day}`, dayId: `day-${day}` },
+      { type: "addActivity", id: `meal-${day}`, dayId: `day-${day}`, title: "Lunch at Fictional Cafe A", kind: "meal", startTime: "12:00", durationMinutes: 60, venue: { name: "Fictional Cafe A", address: "1 Fictional Street", city: "Rome", sourceId } },
+      { type: "updateDay", id: `day-${day}`, changes: { startLocation: { locationItemId: "stay" }, endLocation: day === 3 ? null : { locationItemId: "stay" } } },
+    ];
+    if (calls === 5) return functionStream("editPlan", { operations: dayBatch(1) });
+    if (calls === 6) return functionStream("readPlan", { view: "effective", selector: "days", ids: ["day-1"] });
+    if (calls === 7) {
+      assert.match(JSON.stringify(latest.data), /meal-1/);
+      return functionStream("editPlan", { operations: [...dayBatch(2), { type: "updateDay", id: "day-2", changes: { endLocation: { locationItemId: "missing" } } }] });
+    }
+    if (calls === 8) {
+      assert.equal(latest.outcome, "blocked");
+      return functionStream("editPlan", { operations: dayBatch(2) });
+    }
+    if (calls === 9) return functionStream("editPlan", { operations: dayBatch(3) });
+    if (calls === 10) return functionStream("createBudget", { budget: { currency: "EUR", scope: "per_person", travelers: 2, limit: 600, assumptions: "Two adults sharing a room. Synthetic evidence.", exclusions: ["International travel"] } });
+    if (calls === 11) {
+      assert.match(latest.message, /Empty budget initialized and unreviewed/);
+      const stay = { ...unpricedStay, planItemIds: ["stay"], pricing: "estimated", min: 40, max: 60, sources: [{ sourceId, detail: "Synthetic lodging 40 to 60 per person-night." }] };
+      return functionStream("editBudget", { operations: [stay, ...costs.slice(0, 2)] });
+    }
+    if (calls === 12) return functionStream("editBudget", { operations: costs.slice(2) });
+    if (calls === 13) return functionStream("editPlan", { operations: [{ type: "updateActivity", id: "visit-2", changes: { reason: "Allow a slower second day." } }] });
+    if (calls === 14) return functionStream("editBudget", { operations: [{ type: "review" }] });
+    if (calls === 15) return functionStream("inspectChanges", {});
+    if (calls === 16) {
+      assert.equal(latest.data.saved, false);
+      assert.equal(latest.data.blockers.length, 0);
+      return functionStream("commit", { summary: "Saved three days, lodging and item-linked costs", handledInputIds: [] });
+    }
+    assert.match(JSON.stringify(body), /Verified current-request publication:/);
+    assert.equal(body.tool_choice, "none");
+    return providerStream();
+  };
+  const response = await handleChat(new Request(`http://localhost/api/trips/${reference}/chat`, {
+    method: "POST", headers: { "Content-Type": "application/json", origin: "http://localhost" },
+    body: JSON.stringify({ conversationId: conversation, expectedLastId: null, retry: false, message: { id: "incremental-user", text: "Plan three relaxed Rome days with lodging and researched meal costs for two adults. Budget EUR 600 per person." } }),
+  }), reference);
+  assert.doesNotMatch(await response.text(), /errorText/);
+  assert.equal(calls, 17); assert.equal(researchCalls, 1);
+  const saved = (await getPlan(reference)).plan!;
+  assert.deepEqual(saved.days.map(day => day.itemIds), [["visit-1", "meal-1"], ["visit-2", "meal-2"], ["visit-3", "meal-3"]]);
+  assert.equal(Object.keys(saved.items).length, 7);
+  assert.equal(saved.items["visit-2"].reason, "Allow a slower second day.");
+  const budget = await getBudget(reference);
+  assert.equal(budget.budget!.entries.length, 7);
+  assert.equal(budget.needsReview, false);
+  assert.deepEqual(budgetTotals(budget.budget!), { min: 170, max: 270, confirmed: 0, priced: 7, unknown: 0 });
+  assert.equal((await db.query("select * from public.planning_commits")).rows.length, 1);
+  assert.equal((await loadConversation(reference, conversation)).messages.at(-1)?.metadata?.status, "complete");
+});
 const env = Object.fromEntries(
   [
     "OPENAI_API_KEY",
@@ -53,11 +270,12 @@ beforeEach(async () => {
     SUPABASE_URL: "https://db.example",
     SUPABASE_SECRET_KEY: "sb_secret_fixture",
     AGENT_WEB_SEARCH: "false",
+
   });
   provider = async () => providerStream();
   globalThis.fetch = async (url, init) => {
     const target = new URL(String(url));
-    if (target.hostname !== "db.example") { setToolRequest(JSON.parse(String(init?.body))); return provider(url, init); }
+    if (target.hostname !== "db.example") { return provider(url, init); }
     const root = "/storage/v1/object/";
     if (target.pathname.startsWith(root + "authenticated/")) {
       const key = target.pathname.slice((root + "authenticated/").length);
@@ -183,6 +401,7 @@ test("plan plus context publishes together with one recoverable receipt", async 
     markdown: "# Preferences\nSlow pace, from user-plan.",
   });
   assert.equal((await agent.propose(examplePlan(), [])).valid, true);
+  await agent.proposeBudget!(fixturePricedBudget(), true);
   const saved = (await agent.commit("Created three days", ["user-plan"])) as {
     saved: boolean;
     receipt: { revision: number };
@@ -234,6 +453,7 @@ test("plan plus context publishes together with one recoverable receipt", async 
 test("concurrent document edits reject a stale run without publishing its plan or files", async () => {
   const { agent } = await session();
   await agent.propose(examplePlan(), []);
+  await agent.proposeBudget!(fixturePricedBudget(), true);
   await text();
   await assert.rejects(agent.commit("Create", ["user-plan"]), /changed/);
   assert.equal((await getPlan(reference)).plan, null);
@@ -241,6 +461,7 @@ test("concurrent document edits reject a stale run without publishing its plan o
   agent.recordWebSources!(["https://example.com/test-rate"]);
   await agent.proposeBudget!(fixturePricedBudget(), true);
   assert.equal((await agent.propose(examplePlan(), [])).valid, true);
+  await agent.proposeBudget!(fixturePricedBudget(), true);
   await agent.commit("Create", ["user-plan"]);
   assert.ok((await getPlan(reference)).plan);
 });
@@ -267,6 +488,7 @@ test("transaction rollback leaves staged bytes unpublished when a source is inva
     },
   };
   assert.equal((await agent.propose(p, [])).valid, true);
+  await agent.proposeBudget!(fixturePricedBudget(), true);
   await assert.rejects(agent.commit("Save", ["user-plan"]), /source/);
   assert.equal((await getPlan(reference)).plan, null);
   assert.equal(
@@ -278,6 +500,7 @@ test("transaction rollback leaves staged bytes unpublished when a source is inva
 test("stopped generations cannot commit and failed user input remains pending", async () => {
   const { agent, turn } = await session();
   await agent.propose(examplePlan(), []);
+  await agent.proposeBudget!(fixturePricedBudget(), true);
   await saveReply(
     reference,
     conversation,
@@ -310,23 +533,13 @@ test("SDK tool loop validates, commits, persists a receipt, and restores the res
     );
     assert.equal(body.store, false);
     assert.equal(body.parallel_tool_calls, false);
+    assert.equal(body.reasoning?.effort, call === 0 ? "medium" : "low", "Responses uses requirement judgment followed by assembly and final reporting for this fixture.");
     call++;
-    if (call === 1)
-      return functionStream("proposePlan", {
-        plan: examplePlan(),
-        authorizedItemIds: [],
-      });
-    if (call === 2) return functionStream("proposeBudget", { budget: unknownBudget(), reviewed: true });
-    if (call === 3) {
-      assert.match(JSON.stringify(body), /Resolve missing prices/);
-      return functionStream("resolveBudgetGaps", { gaps: [{ entryId: "stay", reason: "search_unavailable", explanation: "Online search is disabled for this isolated test; no receipt supplied." }] });
-    }
-    if (call === 4) {
+    const draft = offlineDraftCalls()[call - 1];
+    if (draft) return functionStream(...draft);
+    if (call === 7) {
       assert.match(JSON.stringify(body), /readyToCommit/);
-      return functionStream("commit", {
-        summary: "Created your first plan",
-        handledInputIds: [],
-      });
+      return functionStream("commit", { summary: "Created your first plan", handledInputIds: [] });
     }
     assert.match(JSON.stringify(body), /Created your first plan/);
     return providerStream();
@@ -345,7 +558,7 @@ test("SDK tool loop validates, commits, persists a receipt, and restores the res
   assert.equal(response.status, 200);
   const stream = await response.text();
   assert.doesNotMatch(stream, /errorText/);
-  assert.equal(call, 5);
+  assert.equal(call, 8);
   assert.equal((stream.match(/"type":"text-start"/g) ?? []).length, 1);
   assert.equal((stream.match(/What pace do you prefer/g) ?? []).length, 1);
   assert.ok((await getPlan(reference)).plan);
@@ -423,25 +636,6 @@ test("source deletion denies file access without erasing saved facts or blocking
   assert.equal((await getPlan(reference)).plan?.startDate?.value, "2026-11-01");
 });
 
-test("abandoned text staging expires without deleting published versions", async () => {
-  const { edit } = await text();
-  const staged = await prepareDocument(
-    reference,
-    { ...edit, expectedRevision: 1, markdown: "Unpublished text" },
-    "agent",
-  );
-  await db.query(
-    "update public.document_writes set created_at=now()-interval '25 hours' where id=$1",
-    [staged.id],
-  );
-  const abandoned = await db.query<{ v: { id: string; path: string }[] }>(
-    "select public.document_abandoned() as v",
-  );
-  assert.equal(abandoned.rows[0].v.length, 1);
-  assert.equal(abandoned.rows[0].v[0].id, staged.id);
-  await assert.rejects(publishDocument(reference, staged), /invalid/);
-  assert.equal((await readTextDocument(reference, edit.id)).contentRevision, 1);
-});
 
 test("manual retry returns the latest snapshot without replacing a newer protected plan", async () => {
   const initial = examplePlan(),
@@ -487,7 +681,7 @@ test("SDK saves a complete comparable-based budget with provenance and correct t
   let call = 0;
   provider = async (_url, init) => {
     const body = JSON.parse(String(init?.body));
-    assert.match(JSON.stringify(body), /Required first-generation guide/);
+    if (body.tool_choice !== "none") assert.match(JSON.stringify(body), /Required first-generation guide/);
     assert.match(JSON.stringify(body), /web_search/);
     assert.doesNotMatch(JSON.stringify(body), /webSearch/);
     assert.ok(body.tools.some((tool: { type: string }) => tool.type === "web_search"));
@@ -496,7 +690,7 @@ test("SDK saves a complete comparable-based budget with provenance and correct t
     if (call === 2) {
       assert.match(JSON.stringify(body), /Amount and applicability/);
       const item = { type: "web_search_call", id: "ws_test", status: "completed", action: { type: "search", query: "official Rome rates", sources: [{ type: "url", url: "https://example.com/rates" }] } };
-      const functionEvents = (await functionStream("proposePlan", { plan: examplePlan(), authorizedItemIds: [] }).text()).split("\n\n").filter(line => line.startsWith("data: {")).map(line => JSON.parse(line.slice(6)));
+      const functionEvents = (await functionStream("createPlan", { plan: planHeader }).text()).split("\n\n").filter(line => line.startsWith("data: {")).map(line => JSON.parse(line.slice(6)));
       const events = [
         functionEvents[0],
         { type: "response.output_item.added", output_index: 0, item: { ...item, status: "in_progress" } },
@@ -505,8 +699,20 @@ test("SDK saves a complete comparable-based budget with provenance and correct t
       ];
       return new Response(events.map(event => `data: ${JSON.stringify(event)}\n\n`).join("") + "data: [DONE]\n\n", { headers: { "Content-Type": "text/event-stream" } });
     }
-    if (call === 3) return functionStream("proposeBudget", { budget, reviewed: true });
-    if (call === 4) return functionStream("commit", { summary: "Researched budget saved", handledInputIds: ["research-user"] });
+    if (call === 3) return functionStream("readEnvironment", {});
+    if (call === 4) return functionStream("editPlan", { operations: [visitCommand] });
+    if (call === 5) return functionStream("createBudget", { budget: budgetSettings });
+    if (call === 6) {
+      const sourceId = sourceHandle(body, "https://example.com/rates");
+      return functionStream("editBudget", { operations: [
+        { type: "addCost", id: "stay", label: "Lodging", category: "stay", planItemIds: [], unit: "person-night", quantity: 2, min: 50, max: 80, priceScope: "per_person", assumptions: "Indicative room rate divided by two for assumed room sharing; actual group size remains unknown.", sources: [{ sourceId, title: "Official rates", detail: "Synthetic comparable hotel quotes: EUR 100 to 160 per room-night, different dates." }] },
+        { type: "addCost", id: "food", label: "Meals for three days", category: "food", planItemIds: [], unit: "person-day", quantity: 3, min: 30, max: 50, priceScope: "per_person", assumptions: "Three meals daily, using representative menu prices; no selected restaurants.", sources: [{ sourceId, title: "Official rates", detail: "Synthetic menu anchors: breakfast EUR 5 to 10, lunch 10 to 15, dinner 15 to 25." }] },
+        { type: "addCost", id: "transport", label: "Local transport", category: "transport", planItemIds: [], unit: "person-pass", quantity: 1, min: 45, max: 45, priceScope: "per_person", assumptions: "Indicative published pass price, future tariff not guaranteed.", sources: [{ sourceId, title: "Official rates", detail: "Synthetic pass tariff EUR 45." }] },
+        { type: "addCost", id: "activity", label: "Museum allowance", category: "activities", planItemIds: [], unit: "person-ticket", quantity: 1, min: 15, max: 25, priceScope: "per_person", assumptions: "Comparable museum admission range; selected date not yet quoted.", sources: [{ sourceId, title: "Official rates", detail: "Synthetic comparable museum tariffs EUR 15 and 25." }] },
+        { type: "review" },
+      ] });
+    }
+    if (call === 7) return functionStream("commit", { summary: "Researched budget saved", handledInputIds: ["research-user"] });
     return providerStream();
   };
   const response = await handleChat(new Request(`http://localhost/api/trips/${reference}/chat`, {
@@ -515,14 +721,18 @@ test("SDK saves a complete comparable-based budget with provenance and correct t
   }), reference);
   const stream = await response.text();
   assert.doesNotMatch(stream, /errorText/);
-  assert.equal(call, 5);
+  assert.equal(call, 8);
   const snapshot = await db.query<{ content: typeof budget }>("select content from public.budgets where trip_reference=$1", [reference]);
   const saved = snapshot.rows[0]?.content;
   assert.deepEqual(budgetTotals(saved), { min: 250, max: 380, confirmed: 0, priced: 4, unknown: 0 });
   assert.equal(saved.travelers, null);
   assert.match(saved.entries[0].assumptions, /assumed room sharing/);
   assert.match(saved.entries[0].sources[0].detail, /per room-night/);
-  assert.deepEqual(saved.entries, budget.entries);
+  for (const entry of saved.entries) {
+    assert.ok(!Number.isNaN(Date.parse(entry.sources[0].checkedAt)));
+    const expected = budget.entries.find(expected => expected.id === entry.id)!;
+    assert.deepEqual(entry, { ...expected, sources: [{ ...expected.sources[0], checkedAt: entry.sources[0].checkedAt }] });
+  }
 });
 
 test("SDK blocks the six-unknown regression, delivers guidance, then saves sourced prices and explained gaps", async () => {
@@ -556,37 +766,39 @@ test("SDK blocks the six-unknown regression, delivers guidance, then saves sourc
     const outputs = body.input.filter((item: { type: string }) => item.type === "function_call_output");
     const latest = outputs.length ? JSON.parse(outputs.at(-1).output).data : null;
     call++;
-    if (call === 1) return searchAndCall("proposePlan", { plan: examplePlan(), authorizedItemIds: [] });
-    if (call === 2) return functionStream("proposeBudget", { budget: missing, reviewed: true });
-    if (call === 3) {
+    if (call === 1) return searchAndCall("createPlan", { plan: planHeader });
+    if (call === 2) return functionStream("editPlan", { operations: [visitCommand] });
+    if (call === 3) return functionStream("createBudget", { budget: budgetSettings });
+    if (call === 4) return functionStream("editBudget", { operations: [...["stay", "food", "transit", "colosseum", "pantheon", "tax"].map(id => ({ ...unpricedStay, id, label: id, assumptions: "No supported amount from the initial search." })), { type: "review" }] });
+    if (call === 5) {
       assert.equal(latest.budgetCheck.priced, 0);
       assert.equal(latest.budgetCheck.unknown, 6);
       assert.equal(latest.guidance.id, "budget-gaps");
       return functionStream("commit", { summary: "Premature completion", handledInputIds: ["gap-user"] });
     }
-    if (call === 4) {
+    if (call === 6) {
       assert.equal(latest.saved, false);
       assert.equal(latest.budgetCheck.pending.length, 6);
       assert.match(latest.guidance.content, /targeted researchWeb follow-up/);
       assert.equal((await getPlan(reference)).plan, null);
-      const rows = await db.query("select * from public.budgets where trip_reference=$1", [reference]);
-      assert.equal(rows.rows.length, 0);
+      assert.equal((await db.query("select * from public.budgets where trip_reference=$1", [reference])).rows.length, 0);
       assert.equal(files.size, 0);
-      return searchAndCall("readGuide", { id: "budget-research" });
+      return searchAndCall("readEnvironment", {});
     }
-    if (call === 5) return functionStream("proposeBudget", { budget: corrected, reviewed: true });
-    if (call === 6) {
+    if (call === 7) return functionStream("editBudget", { operations: [{ type: "updateCost", id: "stay", changes: { pricing: "estimated", min: 40, max: 60, sources: [{ sourceId: sourceHandle(body), detail: "Synthetic comparable room rates." }] } }] });
+    if (call === 8) {
       assert.equal(latest.budgetCheck.priced, 1);
       assert.equal(latest.budgetCheck.unknown, 5);
       return functionStream("resolveBudgetGaps", { gaps });
     }
-    if (call === 7) {
+    if (call === 9) {
       assert.equal(latest.budgetCheck.readyToCommit, true);
       assert.equal(latest.budgetCheck.coverage, "partial");
-      return functionStream("commit", { summary: "Partial researched budget, five costs still unknown", handledInputIds: ["gap-user"] });
+      return functionStream("editBudget", reviewBudget);
     }
-    assert.equal(latest.saved, true);
-    assert.equal(latest.budgetCheck.unknown, 5);
+    if (call === 10) return functionStream("commit", { summary: "Partial researched budget, five costs still unknown", handledInputIds: ["gap-user"] });
+    assert.match(JSON.stringify(body), /Verified current-request publication:/);
+    assert.match(JSON.stringify(body), /Priced subtotal/);
     return providerStream();
   };
   const response = await handleChat(new Request(`http://localhost/api/trips/${reference}/chat`, {
@@ -595,7 +807,7 @@ test("SDK blocks the six-unknown regression, delivers guidance, then saves sourc
       message: { id: "gap-user", text: "Plan Rome with researched prices" } }),
   }), reference);
   assert.doesNotMatch(await response.text(), /errorText/);
-  assert.equal(call, 8);
+  assert.equal(call, 11);
   const saved = await db.query<{ content: typeof missing }>("select content from public.budgets where trip_reference=$1", [reference]);
   assert.equal(saved.rows[0].content.entries[0].unitMin, 40);
   for (const entry of saved.rows[0].content.entries.slice(1)) {
@@ -663,7 +875,8 @@ test("checkpoint retries recover lost responses without duplicate document versi
     if (String(url).endsWith("/planning_save_brief") && !lost) { lost = true; throw new Error("Lost checkpoint response"); }
     return result;
   };
-  await assert.rejects(agent.saveBrief(briefText, 0), /Lost checkpoint response/);
+  const first = await agent.saveBrief(briefText, 0) as BriefResult;
+  assert.equal(first.saved, true, "The host verifies the same brief write after a lost response.");
   const recovered = await agent.saveBrief(briefText, 0) as BriefResult;
   assert.equal(recovered.saved, true);
   assert.equal(recovered.document.contentRevision, 1);
@@ -743,14 +956,13 @@ test("SDK runs trip-details checkpoint and shared catalog tools before proposing
       assert.match(JSON.stringify(body), /Borghese Gallery/);
       return functionStream("readPlaces", { ids: ["place_001"] });
     }
-    if (call === 5) return functionStream("proposePlan", { plan: examplePlan(), authorizedItemIds: [] });
-    if (call === 6) return functionStream("proposeBudget", { budget: unknownBudget(), reviewed: true });
-    if (call === 7) return functionStream("saveBrief", { markdown: briefText + "\nProposed base: Rome.", expectedRevision: 1 });
-    if (call === 8) {
+    const draft = offlineDraftCalls()[call - 5];
+    if (draft) return functionStream(...draft);
+    if (call === 11) return functionStream("saveBrief", { markdown: briefText + "\nProposed base: Rome.", expectedRevision: 1 });
+    if (call === 12) {
       assert.match(JSON.stringify(body), /Travel brief update prepared/);
-      return functionStream("resolveBudgetGaps", { gaps: [{ entryId: "stay", reason: "search_unavailable", explanation: "No online search in this mock run." }] });
+      return functionStream("commit", { summary: "Brief and plan saved", handledInputIds: [] });
     }
-    if (call === 9) return functionStream("commit", { summary: "Brief and plan saved", handledInputIds: [] });
     assert.equal(body.tool_choice, "none");
     return providerStream();
   };
@@ -760,7 +972,7 @@ test("SDK runs trip-details checkpoint and shared catalog tools before proposing
   }), reference);
   const stream = await response.text();
   assert.doesNotMatch(stream, /errorText|Invalid input/);
-  assert.equal(call, 10);
+  assert.equal(call, 13);
   assert.ok((await getPlan(reference)).plan);
   assert.equal((await db.query("select * from document_versions")).rows.length, 2);
   const saved = await loadConversation(reference, conversation);
@@ -790,13 +1002,13 @@ test("runtime catches an unsaved final response and gives one bounded recovery o
   provider = async (_url, init) => {
     const body = JSON.parse(String(init?.body));
     call++;
-    if (call === 1) return functionStream("proposePlan", { plan: examplePlan(), authorizedItemIds: [] });
-    if (call === 2) return providerStream();
-    assert.match(JSON.stringify(body), /Completion check/);
-    if (call === 3) return functionStream("proposeBudget", { budget: unknownBudget(), reviewed: true });
-    if (call === 4) return functionStream("resolveBudgetGaps", { gaps: [{ entryId: "stay", reason: "search_unavailable", explanation: "Online research is disabled in this isolated fixture; no rate evidence supplied." }] });
-    if (call === 5) return functionStream("commit", { summary: "Recovered unfinished save", handledInputIds: [] });
-    if (call === 6) {
+    const draft = offlineDraftCalls();
+    if (call <= 2) return functionStream(...draft[call - 1]);
+    if (call === 3) return providerStream();
+    assert.match(JSON.stringify(body), body.tool_choice === "none" ? /Verified current-request publication:/ : /Completion check/);
+    if (call <= 7) return functionStream(...draft[call - 2]);
+    if (call === 8) return functionStream("commit", { summary: "Recovered unfinished save", handledInputIds: [] });
+    if (call === 9) {
       assert.equal(body.tool_choice, "none");
       return new Response((await providerStream().text()).replaceAll("What pace do you prefer?", "Your draft is saved. What pace do you prefer?"), { headers: { "Content-Type": "text/event-stream" } });
     }
@@ -808,7 +1020,7 @@ test("runtime catches an unsaved final response and gives one bounded recovery o
   }), reference);
   const stream = await response.text();
   assert.doesNotMatch(stream, /errorText/);
-  assert.equal(call, 6);
+  assert.equal(call, 9);
   assert.equal((stream.match(/"type":"text-start"/g) ?? []).length, 1);
   assert.equal((stream.match(/What pace do you prefer/g) ?? []).length, 1);
   assert.ok((await getPlan(reference)).plan);
@@ -819,15 +1031,39 @@ test("runtime catches an unsaved final response and gives one bounded recovery o
   assert.equal(last.parts.find(part => part.type === "data-action")?.data.state, "saved");
 });
 
+test("a protocol failure during recovery can use the remaining allowance to save", async () => {
+  let call = 0;
+  provider = async (_url, init) => {
+    call++;
+    const draft = offlineDraftCalls()[call - 1];
+    if (draft) return functionStream(...draft);
+    if (call === 7 || call === 8) return providerStream();
+    if (call === 9) {
+      assert.match(String(init?.body), /previous response made no tool call/);
+      return functionStream("commit", { summary: "Recovered using remaining allowance", handledInputIds: [] });
+    }
+    return providerStream();
+  };
+  const response = await handleChat(new Request(`http://localhost/api/trips/${reference}/chat`, {
+    method: "POST", headers: { "Content-Type": "application/json", origin: "http://localhost" },
+    body: JSON.stringify({ conversationId: conversation, expectedLastId: null, retry: false, message: { id: "protocol-recovery-user", text: "Plan Rome." } }),
+  }), reference);
+  await response.text();
+  assert.equal(call, 10);
+  assert.ok((await getPlan(reference)).plan);
+  assert.equal((await loadConversation(reference, conversation)).messages.at(-1)?.metadata?.status, "complete");
+  assert.equal((await db.query("select * from public.planning_commits")).rows.length, 1);
+});
+
 test("an agent that still does not commit ends with durable unsaved status, not task success", async () => {
   let call = 0;
-  provider = async () => ++call === 1 ? functionStream("proposePlan", { plan: examplePlan(), authorizedItemIds: [] }) : providerStream();
+  provider = async () => ++call === 1 ? functionStream("createPlan", { plan: planHeader }) : providerStream();
   const response = await handleChat(new Request(`http://localhost/api/trips/${reference}/chat`, {
     method: "POST", headers: { "Content-Type": "application/json", origin: "http://localhost" },
     body: JSON.stringify({ conversationId: conversation, expectedLastId: null, retry: false, message: { id: "unsaved-user", text: "Plan Rome" } }),
   }), reference);
   const stream = await response.text();
-  assert.equal(call, 3, "only one continuation");
+  assert.equal(call, 4, "One extra bounded protocol-repair pass, never an unbounded retry loop");
   assert.match(stream, /"state":"unsaved"/);
   assert.equal((await getPlan(reference)).plan, null);
   const last = (await loadConversation(reference, conversation)).messages.at(-1)!;
@@ -863,6 +1099,7 @@ test("action state survives checkpoints and interruption and restores as retry c
 test("receipt verification recovers an actually committed write after a lost response", async () => {
   const { agent, turn } = await session();
   await agent.propose(examplePlan(), []);
+  await agent.proposeBudget!(fixturePricedBudget(), true);
   const actualFetch = globalThis.fetch;
   let dropped = false;
   globalThis.fetch = async (url, init) => {
@@ -902,7 +1139,7 @@ test("SDK input validation failures also participate in completion checks", asyn
   let call = 0;
   provider = async (_url, init) => {
     call++;
-    if (call === 1) return functionStream("proposePlan", { plan: {}, authorizedItemIds: [] });
+    if (call === 1) return functionStream("createPlan", { plan: {} });
     assert.match(String(init?.body), /TOOL_INPUT_INVALID|Completion check/);
     return providerStream();
   };
@@ -911,7 +1148,7 @@ test("SDK input validation failures also participate in completion checks", asyn
     body: JSON.stringify({ conversationId: conversation, expectedLastId: null, retry: false, message: { id: "invalid-tool-user", text: "Plan Rome" } }),
   }), reference);
   await response.text();
-  assert.equal(call, 3);
+  assert.equal(call, 4);
   const last = (await loadConversation(reference, conversation)).messages.at(-1)!;
   assert.equal(last.metadata?.status, "failed");
   assert.equal(last.parts.find(part => part.type === "data-action")?.data.code, "TOOL_INPUT_INVALID");
@@ -923,10 +1160,9 @@ test("planning continues past sixteen steps and saves before replying", async ()
   provider = async () => {
     call++;
     if (call < 20) return functionStream("readGuide", { id: "budget-research" });
-    if (call === 20) return functionStream("proposePlan", { plan: examplePlan(), authorizedItemIds: [] });
-    if (call === 21) return functionStream("proposeBudget", { budget: unknownBudget(), reviewed: true });
-    if (call === 22) return functionStream("resolveBudgetGaps", { gaps: [{ entryId: "stay", reason: "search_unavailable", explanation: "Research is disabled in this isolated fixture and no source evidence exists." }] });
-    if (call === 23) return functionStream("commit", { summary: "Long planning run saved", handledInputIds: [] });
+    const draft = offlineDraftCalls()[call - 20];
+    if (draft) return functionStream(...draft);
+    if (call === 26) return functionStream("commit", { summary: "Long planning run saved", handledInputIds: [] });
     return providerStream();
   };
   const response = await handleChat(new Request(`http://localhost/api/trips/${reference}/chat`, {
@@ -934,24 +1170,24 @@ test("planning continues past sixteen steps and saves before replying", async ()
     body: JSON.stringify({ conversationId: conversation, expectedLastId: null, retry: false, message: { id: "long-user", text: "Plan Rome" } }),
   }), reference);
   assert.doesNotMatch(await response.text(), /errorText/);
-  assert.equal(call, 24);
+  assert.equal(call, 27);
   assert.ok((await getPlan(reference)).plan);
   const last = (await loadConversation(reference, conversation)).messages.at(-1)!;
   assert.equal(last.metadata?.status, "complete");
   assert.equal(last.parts.find(part => part.type === "data-action")?.data.state, "saved");
 });
 
-test("unfinished tool loops stop at thirty total steps including recovery", async () => {
+test("unfinished tool loops stop at the configured total steps including recovery", async () => {
   let call = 0;
   provider = async (_url, init) => {
     call++;
     const body = JSON.stringify(JSON.parse(String(init?.body)));
-    assert.ok(call <= 30, "No provider call beyond the total allowance");
-    if (call === 25) assert.match(body, /Run allowance: 3 steps remain/);
-    if (call === 27) assert.match(body, /Run allowance: 1 steps remain/);
-    if (call >= 28) assert.match(body, /Completion check/);
+    assert.ok(call <= MAX_AGENT_STEPS, "No provider call beyond the total allowance");
+    if (call === MAX_AGENT_STEPS - RECOVERY_STEPS - 2) assert.match(body, /Run allowance: 3 steps remain/);
+    if (call === MAX_AGENT_STEPS - RECOVERY_STEPS) assert.match(body, /Run allowance: 1 steps remain/);
+    if (call > MAX_AGENT_STEPS - RECOVERY_STEPS) assert.match(body, /Completion check/);
     return call === 1
-      ? functionStream("proposePlan", { plan: examplePlan(), authorizedItemIds: [] })
+      ? functionStream("createPlan", { plan: planHeader })
       : functionStream("readGuide", { id: "budget-research" });
   };
   const response = await handleChat(new Request(`http://localhost/api/trips/${reference}/chat`, {
@@ -960,10 +1196,10 @@ test("unfinished tool loops stop at thirty total steps including recovery", asyn
   }), reference);
   const stream = await response.text();
   assert.doesNotMatch(stream, /errorText/);
-  assert.equal(call, 30);
+  assert.equal(call, MAX_AGENT_STEPS);
   const failure = (await loadConversation(reference, conversation)).messages.at(-1)?.parts.find(part => part.type === "data-failure");
   assert.equal(failure?.data.code, "step_limit");
-  assert.equal(failure?.data.steps, 30);
+  assert.equal(failure?.data.steps, MAX_AGENT_STEPS);
   assert.equal((await getPlan(reference)).plan, null);
   assert.equal((await loadConversation(reference, conversation)).messages.at(-1)?.metadata?.status, "interrupted");
 });
@@ -973,12 +1209,12 @@ test("a commit at the planning limit gets a final explanation without repeating 
   let call = 0;
   provider = async (_url, init) => {
     call++;
-    if (call < 24) return functionStream("readGuide", { id: "budget-research" });
-    if (call === 24) return functionStream("proposePlan", { plan: examplePlan(), authorizedItemIds: [] });
-    if (call === 25) return functionStream("proposeBudget", { budget: unknownBudget(), reviewed: true });
-    if (call === 26) return functionStream("resolveBudgetGaps", { gaps: [{ entryId: "stay", reason: "search_unavailable", explanation: "Research disabled in this isolated fixture with no evidence supplied." }] });
-    if (call === 27) return functionStream("commit", { summary: "Saved at planning limit", handledInputIds: [] });
-    assert.match(String(init?.body), /changes are already saved and verified/);
+    const commitStep = MAX_AGENT_STEPS - RECOVERY_STEPS;
+    if (call < commitStep - 6) return functionStream("readGuide", { id: "budget-research" });
+    const draft = offlineDraftCalls()[call - (commitStep - 6)];
+    if (draft) return functionStream(...draft);
+    if (call === commitStep) return functionStream("commit", { summary: "Saved at planning limit", handledInputIds: [] });
+    assert.match(String(init?.body), /Verified current-request publication:/);
     assert.equal(JSON.parse(String(init?.body)).tool_choice, "none");
     return providerStream();
   };
@@ -987,7 +1223,7 @@ test("a commit at the planning limit gets a final explanation without repeating 
     body: JSON.stringify({ conversationId: conversation, expectedLastId: null, retry: false, message: { id: "commit-limit-user", text: "Plan Rome" } }),
   }), reference);
   assert.doesNotMatch(await response.text(), /errorText/);
-  assert.equal(call, 28);
+  assert.equal(call, MAX_AGENT_STEPS - RECOVERY_STEPS + 1);
   const last = (await loadConversation(reference, conversation)).messages.at(-1)!;
   assert.equal(last.metadata?.status, "complete");
   assert.equal(last.parts.find(part => part.type === "data-action")?.data.state, "saved");
@@ -1017,19 +1253,21 @@ test("readable research survives later planning steps and fixes actionable price
     const body = JSON.parse(String(init?.body));
     if (body.stream !== true) { researchCalls++; return researchResponse(); }
     plannerCalls++;
-    if (plannerCalls === 1) return functionStream("proposePlan", { plan: examplePlan(), authorizedItemIds: [] });
-    if (plannerCalls === 2) return functionStream("proposeBudget", { budget: unknownBudget(), reviewed: true });
-    if (plannerCalls === 3) return functionStream("resolveBudgetGaps", { gaps: [{ entryId: "stay", reason: "not_found", explanation: "No comparable room prices found yet." }] });
-    if (plannerCalls === 4) {
+    if (plannerCalls === 1) return functionStream("createPlan", { plan: planHeader });
+    if (plannerCalls === 2) return functionStream("editPlan", { operations: [visitCommand] });
+    if (plannerCalls === 3) return functionStream("createBudget", { budget: budgetSettings });
+    if (plannerCalls === 4) return functionStream("editBudget", { operations: [unpricedStay] });
+    if (plannerCalls === 5) return functionStream("resolveBudgetGaps", { gaps: [{ entryId: "stay", reason: "not_found", explanation: "No comparable room prices found yet." }] });
+    if (plannerCalls === 6) {
       assert.match(JSON.stringify(body), /Make a targeted web-search follow-up/);
       assert.doesNotMatch(JSON.stringify(body), /The action could not finish/);
       return functionStream("researchWeb", { query: "Find comparable Rome hotel rates, with amounts, units and source URLs." });
     }
-    if (plannerCalls === 5) {
+    if (plannerCalls === 7) {
       assert.match(JSON.stringify(body), /EUR 80 per person-night/);
-      return functionStream("proposeBudget", { budget: fixturePricedBudget(), reviewed: true });
+      return functionStream("editBudget", { operations: [{ type: "updateCost", id: "stay", changes: { pricing: "estimated", min: 40, max: 60, sources: [{ sourceId: sourceHandle(body), detail: "Synthetic comparable range." }] } }, { type: "review" }] });
     }
-    if (plannerCalls === 6) {
+    if (plannerCalls === 8) {
       assert.match(JSON.stringify(body), /Budget checks passed/);
       return functionStream("commit", { summary: "Plan and evidence-backed estimate saved", handledInputIds: [] });
     }
@@ -1042,7 +1280,7 @@ test("readable research survives later planning steps and fixes actionable price
   }), reference);
   const stream = await response.text();
   assert.doesNotMatch(stream, /errorText/);
-  assert.equal(plannerCalls, 7);
+  assert.equal(plannerCalls, 9);
   assert.equal(researchCalls, 1);
   assert.equal((await loadConversation(reference, conversation)).messages.at(-1)?.metadata?.status, "complete");
   assert.equal((await db.query("select * from budgets")).rows.length, 1);
@@ -1053,10 +1291,10 @@ test("only the final step's answer is published when exhausted recovery also ans
   let call = 0;
   provider = async () => {
     call++;
-    if (call === 30) return providerStream();
-    const response = call === 1 ? functionStream("proposePlan", { plan: examplePlan(), authorizedItemIds: [] })
+    if (call === MAX_AGENT_STEPS) return providerStream();
+    const response = call === 1 ? functionStream("createPlan", { plan: planHeader })
       : functionStream("readGuide", { id: "budget-research" });
-    if (call !== 29) return response;
+    if (call !== MAX_AGENT_STEPS - 1) return response;
     const frames = (await response.text()).split("\n\n").filter(line => line.startsWith("data: {"));
     const narrative = [
       { type: "response.output_item.added", output_index: 1, item: { type: "message", id: "msg_early" } },
@@ -1071,48 +1309,48 @@ test("only the final step's answer is published when exhausted recovery also ans
     body: JSON.stringify({ conversationId: conversation, expectedLastId: null, retry: false, message: { id: "last-step-user", text: "Plan Rome" } }),
   }), reference);
   const stream = await response.text();
-  assert.equal(call, 30);
+  assert.equal(call, MAX_AGENT_STEPS);
   assert.doesNotMatch(stream, /Premature explanation|errorText/);
   const last = (await loadConversation(reference, conversation)).messages.at(-1)!;
   assert.equal(last.parts.find(part => part.type === "data-failure")?.data.code, "step_limit");
   assert.equal(last.parts.filter(part => part.type === "text").map(part => part.text).join(""), "What pace do you prefer?");
 });
 
-test("V2 SDK uses scoped reads, targeted edits and exact document edits before one final save", async () => {
+test("SDK uses scoped reads, targeted edits and exact document edits before one final save", async () => {
   let call = 0, documentId = "";
   provider = async (_url, init) => {
     const body = JSON.parse(String(init?.body));
     const outputs = (body.input as { type?: string; output?: string }[]).filter(item => item.type === "function_call_output").flatMap(item => { try { return [JSON.parse(item.output!)]; } catch { return []; } });
     documentId = outputs.find(result => result.data?.id && result.data?.proposedContentRevision === 1)?.data.id ?? documentId;
     call++;
-    if (call === 1) return functionStream("createPlan", { plan: examplePlan(), authorizedItemIds: [] });
-    if (call === 2) return functionStream("readPlan", { view: "effective", selector: "days", ids: ["day-2"] });
-    if (call === 3) return functionStream("editPlan", { operations: [{ type: "updateDay", id: "day-2", fields: { title: "A slower second day" } }], authorizedItemIds: [] });
-    if (call === 4) return functionStream("createBudget", { budget: unknownBudget(), reviewed: true });
-    if (call === 5) return functionStream("resolveBudgetGaps", { gaps: [{ entryId: "stay", reason: "search_unavailable", explanation: "Offline fixture without any supplied room rate." }] });
-    if (call === 6) return functionStream("editBudget", { operations: [{ type: "setLimit", value: 500 }, { type: "recordReview" }] });
-    if (call === 7) return functionStream("createDocument", { name: "Packing.txt", kind: "working", content: "Clothes\nLight jacket\nDocuments\nPassport\n" });
-    if (call === 8) { assert.ok(documentId); return functionStream("editDocument", { id: documentId, operations: [{ type: "replaceText", oldText: "Light jacket", newText: "Rain jacket" }] }); }
-    if (call === 9) return functionStream("readDocument", { id: documentId, view: "effective", contentRevision: null });
-    if (call === 10) { assert.match(JSON.stringify(outputs), /Rain jacket/); return functionStream("inspectChanges", {}); }
-    if (call === 11) return functionStream("commit", { summary: "Saved itinerary, budget and packing list", handledInputIds: [] });
+    const draft = offlineDraftCalls()[call - 1];
+    if (draft) return functionStream(...draft);
+    if (call === 7) return functionStream("readPlan", { view: "effective", selector: "days", ids: ["day-2"] });
+    if (call === 8) return functionStream("editPlan", { operations: [{ type: "updateDay", id: "day-2", changes: { title: "A slower second day" } }] });
+    if (call === 9) return functionStream("editBudget", { operations: [{ type: "updateSettings", limit: 500 }, { type: "review" }] });
+    if (call === 10) return functionStream("createDocument", { name: "Packing.txt", kind: "working", content: "Clothes\nLight jacket\nDocuments\nPassport\n" });
+    if (call === 11) { assert.ok(documentId); return functionStream("editDocument", { id: documentId, operations: [{ type: "replaceText", oldText: "Light jacket", newText: "Rain jacket" }] }); }
+    if (call === 12) return functionStream("readDocument", { id: documentId, view: "effective", contentRevision: null });
+    if (call === 13) { assert.match(JSON.stringify(outputs), /Rain jacket/); return functionStream("inspectChanges", {}); }
+    if (call === 14) return functionStream("resolveBudgetGaps", { gaps: [{ entryId: "stay", reason: "search_unavailable", explanation: "The updated estimate still has no research source in this isolated test." }] });
+    if (call === 15) return functionStream("editBudget", reviewBudget);
+    if (call === 16) return functionStream("commit", { summary: "Saved itinerary, budget and packing list", handledInputIds: [] });
     assert.equal(body.tool_choice, "none"); return providerStream();
   };
   const response = await handleChat(new Request(`http://localhost/api/trips/${reference}/chat`, {
     method: "POST", headers: { "Content-Type": "application/json", origin: "http://localhost" },
-    body: JSON.stringify({ conversationId: conversation, expectedLastId: null, retry: false, message: { id: "v2-sdk", text: "Plan Rome, keep day two slower, and save a packing list." } }),
+    body: JSON.stringify({ conversationId: conversation, expectedLastId: null, retry: false, message: { id: "scoped-sdk", text: "Plan Rome, keep day two slower, and save a packing list." } }),
   }), reference);
-  const stream = await response.text(); assert.doesNotMatch(stream, /errorText/); assert.equal(call, 12);
+  const stream = await response.text(); assert.doesNotMatch(stream, /errorText/); assert.equal(call, 17);
   assert.equal((await getPlan(reference)).plan!.days[1].title, "A slower second day");
   assert.equal((await readTextDocument(reference, documentId)).markdown, "Clothes\nRain jacket\nDocuments\nPassport\n");
   assert.equal((await db.query("select * from planning_commits")).rows.length, 1);
 });
 
 test("restaurant research flows through the real SDK tool registry into saved meal evidence", async () => {
-  const { restaurantMeal } = await import("./restaurant-fixture");
   process.env.AGENT_WEB_SEARCH = "true";
   let calls = 0, researchCalls = 0;
-  let selected: ReturnType<typeof restaurantMeal>;
+  let sourceId = "", checkedAt = "";
   provider = async (_url, init) => {
     const body = JSON.parse(String(init?.body));
     if (body.stream !== true) {
@@ -1122,18 +1360,17 @@ test("restaurant research flows through the real SDK tool registry into saved me
     calls++;
     if (calls === 1) return functionStream("researchWeb", { query: "Find a nearby lunch venue with name, address, meal service and menu prices, plus representative room costs." });
     if (calls === 2) {
-      const reports = body.input.filter((part: { type: string }) => part.type === "function_call_output")
-        .map((part: { output: string }) => JSON.parse(part.output));
+      const reports = body.input.filter((item: { type: string }) => item.type === "function_call_output").map((item: { output: string }) => JSON.parse(item.output));
       const report = reports.find((result: { data?: { checkedAt?: string } }) => result.data?.checkedAt)?.data;
       assert.ok(report?.checkedAt); assert.match(report.summary, /1 Fictional Street/);
-      selected = restaurantMeal();
-      selected.location = { ...selected.location!, basis: { kind: "research", explanation: "Synthetic venue contact and menu facts.",
-        sources: [{ type: "web", url: report.sources[0].url, accessedAt: report.checkedAt }] } } as typeof selected.location;
-      const plan = examplePlan(); plan.items[selected.id] = selected; plan.days[0].itemIds.push(selected.id);
-      return functionStream("proposePlan", { plan, authorizedItemIds: [] });
+      sourceId = report.sources[0].sourceId; checkedAt = report.checkedAt;
+      return functionStream("createPlan", { plan: planHeader });
     }
-    if (calls === 3) return functionStream("proposeBudget", { budget: fixturePricedBudget(), reviewed: true });
-    if (calls === 4) return functionStream("commit", { summary: "Saved itinerary with a specific lunch venue", handledInputIds: [] });
+    if (calls === 3) return functionStream("editPlan", { operations: [visitCommand, { type: "addActivity", id: "meal-a", dayId: "day-1", kind: "meal", title: "Lunch at Fictional Cafe A", startTime: "12:00", durationMinutes: 60,
+      venue: { name: "Fictional Cafe A", address: "1 Fictional Street", city: "Rome", sourceId } }] });
+    if (calls === 4) return functionStream("createBudget", { budget: budgetSettings });
+    if (calls === 5) return functionStream("editBudget", { operations: [{ ...unpricedStay, pricing: "estimated", min: 40, max: 60, sources: [{ sourceId, detail: "Synthetic lodging rate." }] }, { type: "review" }] });
+    if (calls === 6) return functionStream("commit", { summary: "Saved itinerary with a specific lunch venue", handledInputIds: [] });
     assert.equal(body.tool_choice, "none"); return providerStream();
   };
   const response = await handleChat(new Request(`http://localhost/api/trips/${reference}/chat`, {
@@ -1141,8 +1378,45 @@ test("restaurant research flows through the real SDK tool registry into saved me
     body: JSON.stringify({ conversationId: conversation, expectedLastId: null, retry: false, message: { id: "real-meal-user", text: "Plan Rome with real places to eat." } }),
   }), reference);
   const stream = await response.text();
-  assert.doesNotMatch(stream, /errorText/); assert.equal(calls, 5); assert.equal(researchCalls, 1);
-  assert.deepEqual((await getPlan(reference)).plan!.items["meal-a"], selected!);
+  assert.doesNotMatch(stream, /errorText/); assert.equal(calls, 7); assert.equal(researchCalls, 1);
+  const meal = (await getPlan(reference)).plan!.items["meal-a"];
+  assert.equal(meal.kind, "meal");
+  assert.ok("location" in meal && meal.location?.type === "restaurant");
+  if ("location" in meal && meal.location?.type === "restaurant") {
+    assert.equal(meal.location.label, "Fictional Cafe A");
+    assert.equal(meal.location.address, "1 Fictional Street");
+    assert.deepEqual(meal.location.basis.sources, [{ type: "web", url: "https://example.com/test-rate", accessedAt: checkedAt }]);
+  }
   assert.equal((await loadConversation(reference, conversation)).messages.at(-1)?.metadata?.status, "complete");
   assert.equal((await db.query("select * from planning_commits")).rows.length, 1);
+});
+
+test("Public missing-day schema rejection is discharged by a valid correction before final publication", async () => {
+  let calls = 0;
+  provider = async (_url, init) => {
+    const body = JSON.parse(String(init?.body)); calls++;
+    if (calls === 1) return functionStream("createPlan", { plan: { startDate: null, days: [{ id: "day-1", title: "Art" }, { id: "day-2", title: "Food" }, { id: "day-3", title: "Rest" }] } });
+    if (calls === 2) return functionStream("editPlan", { operations: [{ type: "addActivity", id: "visit", title: "Visit Colosseum", placeId: "place_001", startTime: "09:00" }] });
+    if (calls === 3) {
+      assert.match(JSON.stringify(body), /operations.0.dayId/);
+      return functionStream("editPlan", { operations: [{ type: "addActivity", id: "visit", dayId: "day-1", title: "Visit Colosseum", placeId: "place_001", startTime: "09:00" }] });
+    }
+    if (calls === 4) return functionStream("createBudget", { budget: { currency: "EUR", scope: "per_person", travelers: 2, limit: 600, assumptions: "Isolated offline regression", exclusions: [] } });
+    if (calls === 5) return functionStream("editBudget", { operations: [{ type: "addCost", id: "ticket", label: "Ticket", category: "activities", planItemIds: ["visit"], unit: "admission", quantity: 1, min: null, max: null, priceScope: "per_person", pricing: "unknown", assumptions: "Offline fixture has no evidence", sources: [] }, { type: "review" }] });
+    if (calls === 6) return functionStream("resolveBudgetGaps", { gaps: [{ entryId: "ticket", reason: "search_unavailable", explanation: "Online research is disabled for this isolated protocol regression and no price evidence was provided." }] });
+    if (calls === 7) return functionStream("editBudget", { operations: [{ type: "review" }] });
+    if (calls === 8) return functionStream("commit", { summary: "Corrected the missing day and saved the fixture", handledInputIds: [] });
+    assert.equal(body.tool_choice, "none"); return providerStream();
+  };
+  const response = await handleChat(new Request(`http://localhost/api/trips/${reference}/chat`, {
+    method: "POST", headers: { "Content-Type": "application/json", origin: "http://localhost" },
+    body: JSON.stringify({ conversationId: conversation, expectedLastId: null, retry: false, message: { id: "missing-day-user", text: "Create a minimal isolated protocol fixture with one visit." } }),
+  }), reference);
+  await response.text();
+  const final = (await loadConversation(reference, conversation)).messages.at(-1)!;
+  assert.equal(final.metadata?.status, "complete");
+  assert.equal(final.parts.some(part => part.type === "data-failure"), false);
+  assert.equal((await getPlan(reference)).plan!.days[0].itemIds.includes("visit"), true);
+  assert.equal((await db.query("select * from planning_commits")).rows.length, 1);
+  assert.equal(calls, 9);
 });

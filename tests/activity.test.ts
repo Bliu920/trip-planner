@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { after, before, beforeEach, test } from "node:test";
 import { randomUUID } from "node:crypto";
 import type { PGlite } from "@electric-sql/pglite";
-import { ActivityRecorder } from "../services/activity";
-import { completed, source } from "../services/activity/summary";
+import { ProgressRecorder } from "../services/assistant/progress";
+import { completed, source } from "../services/assistant/progress/summary";
 import { activityEntries, activityRun, type ActivityEntry } from "../lib/activity/model";
 import { createDatabase, seed, reference, otherTrip, conversation, generation } from "./chat-fixture";
 import type { ChatSnapshot } from "../lib/chat/types";
@@ -87,7 +87,7 @@ test("activity storage is private and rejects malformed entries", async () => {
 test("recorder saves before publishing and retains safe results instead of raw inputs", async () => {
   const message = await begin();
   const emitted: ActivityEntry[] = [];
-  const recorder = new ActivityRecorder(generation, async item => { assert.equal(await save(message, item), true); }, item => emitted.push(item));
+  const recorder = new ProgressRecorder(generation, async item => { assert.equal(await save(message, item), true); }, item => emitted.push(item));
   await recorder.consume({ type: "tool-input-available", toolCallId: "search", toolName: "searchPlaces", input: { private: "secret" } });
   await recorder.consume({ type: "tool-output-available", toolCallId: "search", output: { outcome: "succeeded", effect: "none", operationId: "search", code: "OK", message: "internal diagnostic", recovery: { action: "none", instruction: "" }, data: { total: 2, places: [{ name: "Colosseum" }, { name: "Pantheon" }] } } });
   assert.equal(emitted.at(-1)?.status, "complete");
@@ -95,7 +95,7 @@ test("recorder saves before publishing and retains safe results instead of raw i
   assert.doesNotMatch(JSON.stringify(emitted), /secret|internal diagnostic/);
   const reloaded = activityEntries((await snapshot()).messages[1].parts);
   assert.deepEqual(reloaded, [emitted.at(-1)]);
-  const failed = new ActivityRecorder(generation, async () => { throw new Error("offline"); }, () => assert.fail("Unsaved activity must not be published"));
+  const failed = new ProgressRecorder(generation, async () => { throw new Error("offline"); }, () => assert.fail("Unsaved activity must not be published"));
   await assert.rejects(failed.consume({ type: "tool-input-start", toolCallId: "file", toolName: "stageDocument" }), /offline/);
 });
 
@@ -104,7 +104,7 @@ test("run duration is persisted, reloadable and separate from steps", async t =>
   let now = Date.now();
   t.mock.method(Date, "now", () => now);
   const emitted: ActivityEntry[] = [];
-  const recorder = new ActivityRecorder(generation, async item => { assert.equal(await save(message, item), true); }, item => emitted.push(item));
+  const recorder = new ProgressRecorder(generation, async item => { assert.equal(await save(message, item), true); }, item => emitted.push(item));
   await recorder.start();
   await recorder.start();
   assert.equal(emitted.length, 1);
@@ -133,7 +133,7 @@ test("sources reject unsafe links and prepared files never claim saving", () => 
 
 test("duplicate error events cannot overwrite a terminal result or abort history", async () => {
   const saved: ActivityEntry[] = [];
-  const recorder = new ActivityRecorder(generation, async item => { saved.push(item); }, () => {});
+  const recorder = new ProgressRecorder(generation, async item => { saved.push(item); }, () => {});
   await recorder.consume({ type: "tool-input-error", toolCallId: "bad", toolName: "proposePlan", input: {}, errorText: "sensitive diagnostic" });
   await recorder.consume({ type: "tool-output-error", toolCallId: "bad", errorText: "another diagnostic" });
   assert.equal(saved.length, 1);
@@ -143,7 +143,7 @@ test("duplicate error events cannot overwrite a terminal result or abort history
 
 test("repeated calls retain distinct steps and lengthy returned text stays bounded", async () => {
   const entries = new Map<string, ActivityEntry>();
-  const recorder = new ActivityRecorder(generation, async item => { entries.set(item.id, item); }, () => {});
+  const recorder = new ProgressRecorder(generation, async item => { entries.set(item.id, item); }, () => {});
   for (let call = 0; call < 2; call++) {
     await recorder.consume({ type: "tool-input-start", toolCallId: "search", toolName: "web_search" });
     await recorder.consume({ type: "tool-input-available", toolCallId: "search", toolName: "web_search", input: {} });

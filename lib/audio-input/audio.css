@@ -1,27 +1,144 @@
-.audio-mic { display: inline-flex; align-items: center; justify-content: center; width: var(--prompt-target-size, 32px); height: var(--prompt-target-size, 32px); padding: 0; border: 0; border-radius: 50%; background: transparent; color: #666; flex-shrink: 0; }
-.audio-mic > svg { width: var(--prompt-icon-size, 17px); height: var(--prompt-icon-size, 17px); }
-.audio-mic:hover:not(:disabled), .audio-cancel:hover:not(:disabled), .audio-feedback button:hover:not(:disabled) { background: #f1f1ef; color: #222; }
-.audio-mic:disabled { opacity: .4; }
+.audio-mic {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--prompt-target-size, 32px);
+  height: var(--prompt-target-size, 32px);
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #666;
+  flex-shrink: 0;
+}
+.audio-mic > svg {
+  width: var(--prompt-icon-size, 17px);
+  height: var(--prompt-icon-size, 17px);
+}
+.audio-mic:hover:not(:disabled),
+.audio-cancel:hover:not(:disabled),
+.audio-feedback button:hover:not(:disabled) {
+  background: #f1f1ef;
+  color: #222;
+}
+.audio-mic:disabled {
+  opacity: 0.4;
+}
 /* Keep the draft mounted. */
-.prompt-input:has(> .audio-capture) > :is(.prompt-input-body, .prompt-input-toolbar, .prompt-input-attachments) { display: none; }
-.audio-capture { display: flex; align-items: center; gap: 16px; width: 100%; min-height: 96px; padding: 16px; color: #222; }
-.audio-signal { display: flex; align-items: center; gap: 16px; flex: 1; min-width: 0; }
-.audio-waveform { display: block; width: 100%; height: 32px; min-width: 0; flex: 1; overflow: hidden; }
-.audio-waveform line { stroke: currentColor; stroke-width: 2; stroke-linecap: round; vector-effect: non-scaling-stroke; }
-.audio-timer { flex-shrink: 0; font-size: 12px; line-height: 20px; color: #777; font-variant-numeric: tabular-nums; }
-.audio-status { width: 100%; text-align: center; font-size: 14px; line-height: 20px; color: #777; }
-.audio-icon-button { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: #222; }
-.audio-icon-button > svg { width: 17px; height: 17px; }
-.audio-confirm { background: #222; color: #fff; }
-.audio-confirm:hover:not(:disabled) { background: #444; }
-.audio-confirm:disabled { opacity: .45; }
-.prompt-input .audio-capture .audio-confirm:focus-visible { background-color: #555; color: #fff; }
-.audio-feedback { display: flex; align-items: center; gap: 4px; width: calc(100% - 32px); margin: 0 16px 8px; }
-.audio-feedback p { flex: 1; min-width: 0; margin: 0 8px 0 0; font-size: 13px; line-height: 1.5; color: #a03226; overflow-wrap: anywhere; }
+.prompt-input:has(> .audio-capture)
+  > :is(.prompt-input-body, .prompt-input-toolbar, .prompt-input-attachments) {
+  display: none;
+}
+.audio-capture {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  min-height: 96px;
+  padding: 16px;
+  color: #222;
+}
+.audio-signal {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex: 1;
+  min-width: 0;
+}
+.audio-waveform {
+  display: block;
+  width: 100%;
+  height: 32px;
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+}
+.audio-waveform line {
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+.audio-timer {
+  flex-shrink: 0;
+  font-size: 12px;
+  line-height: 20px;
+  color: #777;
+  font-variant-numeric: tabular-nums;
+}
+.audio-status {
+  width: 100%;
+  text-align: center;
+  font-size: 14px;
+  line-height: 20px;
+  color: #777;
+}
+.audio-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #222;
+}
+.audio-icon-button > svg {
+  width: 17px;
+  height: 17px;
+}
+.audio-confirm {
+  background: #222;
+  color: #fff;
+}
+.audio-confirm:hover:not(:disabled) {
+  background: #444;
+}
+.audio-confirm:disabled {
+  opacity: 0.45;
+}
+.prompt-input .audio-capture .audio-confirm:focus-visible {
+  background-color: #555;
+  color: #fff;
+}
+.audio-feedback {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: calc(100% - 32px);
+  margin: 0 16px 8px;
+}
+.audio-feedback p {
+  flex: 1;
+  min-width: 0;
+  margin: 0 8px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #a03226;
+  overflow-wrap: anywhere;
+}
 @media (max-width: 600px), (pointer: coarse) {
-  .audio-capture { min-height: 102px; padding: 12px 6px; gap: 8px; }
-  .audio-signal { gap: 10px; }
-  .audio-icon-button { width: 44px; height: 44px; }
-  .audio-confirm { border: 6px solid transparent; background-clip: padding-box; }
-  .audio-feedback { width: calc(100% - 24px); margin-inline: 12px; }
+  .audio-capture {
+    min-height: 102px;
+    padding: 12px 6px;
+    gap: 8px;
+  }
+  .audio-signal {
+    gap: 10px;
+  }
+  .audio-icon-button {
+    width: 44px;
+    height: 44px;
+  }
+  .audio-confirm {
+    border: 6px solid transparent;
+    background-clip: padding-box;
+  }
+  .audio-feedback {
+    width: calc(100% - 24px);
+    margin-inline: 12px;
+  }
 }

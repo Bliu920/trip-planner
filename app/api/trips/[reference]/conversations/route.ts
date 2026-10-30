@@ -1,4 +1,4 @@
-import { handleConversations } from "@/services/conversations";
+import { handleConversations } from "@/services/assistant";
 
 type Context = { params: Promise<{ reference: string }> };
 

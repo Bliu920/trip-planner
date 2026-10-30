@@ -1,26 +1,57 @@
 import { z } from "zod";
 
-export const actionResultSchema = z.object({
-  outcome: z.enum(["succeeded", "blocked", "failed", "unknown"]),
-  effect: z.enum(["none", "staged", "persisted", "unknown"]),
-  code: z.string().min(1), message: z.string().min(1), operationId: z.string().min(1),
-  recovery: z.object({ action: z.enum(["none", "correct_input", "research", "reload", "verify", "retry", "stop"]), instruction: z.string() }),
-  data: z.unknown(),
-}).strict().refine(result => result.effect !== "persisted" || result.outcome === "succeeded", "Persisted effects need confirmed success.");
+export const actionResultSchema = z
+  .object({
+    outcome: z.enum(["succeeded", "blocked", "failed", "unknown"]),
+    effect: z.enum(["none", "staged", "persisted", "unknown"]),
+    code: z.string().min(1),
+    message: z.string().min(1),
+    operationId: z.string().min(1),
+    recovery: z.object({
+      action: z.enum(["none", "correct_input", "research", "reload", "verify", "retry", "stop"]),
+      instruction: z.string(),
+    }),
+    data: z.unknown(),
+  })
+  .strict()
+  .refine(
+    (result) => result.effect !== "persisted" || result.outcome === "succeeded",
+    "Persisted effects need confirmed success.",
+  );
 export type ActionResult = z.infer<typeof actionResultSchema>;
 export type ActionPayload = Omit<ActionResult, "operationId">;
 
-export const actionStateSchema = z.object({
-  state: z.enum(["in_progress", "saved", "unsaved", "unknown"]),
-  operationId: z.string().min(1), message: z.string().min(1).max(3000),
-  code: z.string().min(1), revision: z.number().int().nonnegative().nullable(),
-}).strict();
+export const actionStateSchema = z
+  .object({
+    state: z.enum(["in_progress", "saved", "unsaved", "unknown"]),
+    operationId: z.string().min(1),
+    message: z.string().min(1).max(3000),
+    code: z.string().min(1),
+    revision: z.number().int().nonnegative().nullable(),
+  })
+  .strict();
 export type ActionState = z.infer<typeof actionStateSchema>;
+
+export type SaveBlocker = "budget_empty" | "plan_empty";
+export function actionBlocker(state: ActionState | null | undefined): SaveBlocker | undefined {
+  if (state?.state !== "unsaved") return undefined;
+  if (state.code === "BUDGET_EMPTY") return "budget_empty";
+  if (state.code === "PLAN_EMPTY") return "plan_empty";
+  // Recognize historical host errors.
+  if (
+    state.code === "WORKSPACE_ERROR" &&
+    state.message.startsWith("The first itinerary needs a budget")
+  )
+    return "budget_empty";
+  return undefined;
+}
 
 export function actionStateLabel(state: ActionState) {
   if (state.state === "saved") return "Changes saved.";
-  if (state.state === "unknown" || state.state === "in_progress") return "Save not confirmed. Reload to check before retrying.";
-  if (state.code === "CHECKPOINT_SAVED") return "Travel brief saved. The plan has not been saved yet.";
+  if (state.state === "unknown" || state.state === "in_progress")
+    return "Save not confirmed. Reload to check before retrying.";
+  if (state.code === "CHECKPOINT_SAVED")
+    return "Travel brief saved. The plan has not been saved yet.";
   if (state.code === "OK") return "Changes are prepared but not saved yet.";
   const reasons: Record<string, string> = {
     PLAN_CONFLICT: "The trip changed. Reload before trying again.",
@@ -29,6 +60,9 @@ export function actionStateLabel(state: ActionState) {
     PLAN_ATTEMPT: "The assistant stopped before finishing. Try again from the chat.",
     PLAN_INVALID: "Some plan details need correction. Ask the assistant to review them.",
     BUDGET_GAPS: "Some prices still need checking. Ask the assistant to continue.",
+    BUDGET_EMPTY: "The trip estimate has no costs yet. Ask the assistant to finish it.",
+    PLAN_EMPTY: "The daily arrangements are unfinished. Ask the assistant to complete them.",
   };
+  if (actionBlocker(state) === "budget_empty") return `Changes not saved. ${reasons.BUDGET_EMPTY}`;
   return `Changes not saved. ${reasons[state.code] ?? "The assistant could not finish these changes. Please try again."}`;
 }

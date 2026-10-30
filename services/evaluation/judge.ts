@@ -4,7 +4,7 @@ import { generateText, Output } from "ai";
 import { z } from "zod";
 import type { EvalCase, Observation, Verdict } from "./contracts";
 
-export const JUDGE_MODEL = "gpt-6-astra";
+export const JUDGE_MODEL = "gpt-6.1-terra";
 export function judgeModel() {
   const value = process.env.EVAL_JUDGE_MODEL?.trim() || JUDGE_MODEL;
   if (value !== JUDGE_MODEL) throw new Error(`Unsupported EVAL_JUDGE_MODEL. Use ${JUDGE_MODEL}; review the evaluation guide before changing models.`);

@@ -6,7 +6,7 @@ Updated: October 27, 2026.
 
 Project cards show up to three real Plan locations as one seamless horizontal cover. Saved Plan membership owns which locations are eligible. Catalog records own image URLs, provenance and illustrative classification. The cover is a derived view: no new database fields, migrations, local-storage snapshots or AI requests.
 
-`services/project-covers/selection.ts` resolves scheduled non-travel items, including linked locations, and skips cancelled arrangements, missing catalog photos, invalid references and unscheduled items. It takes one distinct photographed place per day where possible, then fills remaining slots from itinerary order. The final images appear in itinerary order. Place IDs, provider asset IDs and canonical URL paths are deduplicated. Photos are never guessed from titles or repeated to fill space.
+`services/projects/project-covers/selection.ts` resolves scheduled non-travel items, including linked locations, and skips cancelled arrangements, missing catalog photos, invalid references and unscheduled items. It takes one distinct photographed place per day where possible, then fills remaining slots from itinerary order. The final images appear in itinerary order. Place IDs, provider asset IDs and canonical URL paths are deduplicated. Photos are never guessed from titles or repeated to fill space.
 
 ## Loading boundary
 

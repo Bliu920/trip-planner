@@ -1,3 +1,4 @@
+import { offlineDraftCalls, reviewBudget } from "./authoring-fixture";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { loadCases, gradeChecks } from "../services/evaluation";
@@ -7,7 +8,7 @@ import { providerStream } from "./chat-fixture";
 
 const oldKey = process.env.OPENAI_API_KEY;
 test("a real multi-turn conversation preserves saved document identity and grades each publication", async () => {
-  const { functionStream, setToolRequest } = await import("./plan-fixture");
+  const { functionStream } = await import("./plan-fixture");
   const source = (await loadCases("data/evaluation/cases.json")).cases.find(c => c.id === "F18")!;
   const c = { ...source, research: "disabled" as const, followUps: [{ prompt: "Replace the jacket with a rain layer. Keep the trip unchanged.", assertions: [
     { type: "document_updated" as const, name: "Packing.md" }, { type: "plan_budget_unchanged" as const }, { type: "final_receipt" as const },
@@ -17,7 +18,8 @@ test("a real multi-turn conversation preserves saved document identity and grade
   try {
     const recordedTurns: number[] = [];
     const o = await executeCase(c, async (_url, init) => {
-      const body = JSON.parse(String(init?.body)); setToolRequest(body); call++;
+      const body = JSON.parse(String(init?.body)); call++;
+      assert.doesNotMatch(JSON.stringify(body), /"editToken"/);
       const outputs = (body.input as { type?: string; output?: string }[]).filter(item => item.type === "function_call_output").flatMap(item => {
         try { return [JSON.parse(item.output!)]; } catch { return []; }
       });
@@ -49,12 +51,11 @@ test("a real multi-turn conversation preserves saved document identity and grade
 
 test("a conversation stops at an interrupted turn without fabricating follow-up evidence", async () => {
   const source = (await loadCases("data/evaluation/cases.json")).cases.find(c => c.id === "R10")!;
-  const { functionStream, setToolRequest } = await import("./plan-fixture");
+  const { functionStream } = await import("./plan-fixture");
   process.env.OPENAI_API_KEY = "fixture";
   try {
     const c = { ...source, followUps: [{ prompt: "Make day two lighter.", assertions: [{ type: "final_receipt" as const }] }] };
-    const o = await executeCase(c, async (_url, init) => {
-      setToolRequest(JSON.parse(String(init?.body)));
+    const o = await executeCase(c, async () => {
       return functionStream("saveBrief", { markdown: "# Preferences\nFlorence, art.", expectedRevision: 0 });
     });
     assert.equal(o.turns?.length, 1);
@@ -68,6 +69,26 @@ test("case database has distinct valid inputs and executable criteria", async ()
   assert.ok(cases.some(c => c.fixture === "empty"));
   assert.ok(cases.some(c => c.fixture !== "empty"));
   assert.ok(cases.every(c => c.rubric.length > 0 && c.assertions.length > 0));
+});
+test("unconfigured route acceptance does not require unavailable tools", async () => {
+  const previousKey = process.env.OPENAI_API_KEY;
+  process.env.OPENAI_API_KEY = "fixture";
+  try {
+    const c = (await loadCases("data/evaluation/cases.json")).cases.find(item => item.id === "G01")!;
+    let tools: string[] = [];
+    const observation = await executeCase(c, async (_url, init) => {
+      const body = JSON.parse(String(init?.body)) as { tools: { name?: string }[] };
+      tools = body.tools.map(tool => tool.name ?? "");
+      return providerStream();
+    });
+    assert.ok(!tools.includes("getJourneys"));
+    assert.ok(!tools.includes("resolvePlace"));
+    assert.deepEqual(observation.before, observation.after);
+    assert.ok(gradeChecks(c, observation).every(check => check.outcome === "pass"));
+  } finally {
+    if (previousKey === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = previousKey;
+  }
 });
 test("actual chat entrypoint runs in isolated empty and saved projects", async () => {
   process.env.OPENAI_API_KEY = "fixture";
@@ -95,28 +116,27 @@ test("a judge cannot omit, duplicate or invent criteria", async () => {
 });
 
 test("captures checkpoints, tool results and actual committed artifacts", async () => {
-  const { functionStream, setToolRequest, examplePlan, unknownBudget } = await import("./plan-fixture");
+  const { functionStream } = await import("./plan-fixture");
   process.env.OPENAI_API_KEY = "fixture";
   try {
     const original = (await loadCases("data/evaluation/cases.json")).cases.find(c => c.id === "I01")!;
     const c = { ...original, research: "disabled" as const };
     let call = 0;
-    const mock: typeof fetch = async (_url, init) => {
-      setToolRequest(JSON.parse(String(init?.body)));
+    const mock: typeof fetch = async () => {
       call++;
       if (call === 1) return functionStream("saveBrief", { markdown: "# Preferences\nRome, relaxed.", expectedRevision: 0 });
-      if (call === 2) return functionStream("proposePlan", { plan: examplePlan(), authorizedItemIds: [] });
-      if (call === 3) return functionStream("proposeBudget", { budget: unknownBudget(), reviewed: true });
-      if (call === 4) return functionStream("resolveBudgetGaps", { gaps: [{ entryId: "stay", reason: "search_unavailable", explanation: "Research was disabled; there is no available price evidence." }] });
-      if (call === 5) return functionStream("commit", { summary: "Saved partial draft", handledInputIds: [] });
+      const draft = offlineDraftCalls()[call - 2];
+      if (draft) return functionStream(...draft);
+      if (call === 8) return functionStream("commit", { summary: "Saved partial draft", handledInputIds: [] });
       return providerStream();
     };
     const o = await executeCase(c, mock);
     assert.equal(o.responseStatus, 200);
-    assert.equal(o.providerRequests, 6);
+    assert.equal(o.providerRequests, 9);
     assert.ok(o.after.documents.some(doc => doc.kind === "planning_context" && doc.content?.includes("Rome")));
     assert.ok(o.trace.some(event => event.toolName === "saveBrief"));
     assert.ok(o.trace.some(event => event.type === "tool-output-available"));
+    assert.ok(o.trace.every(event => !["tool-input-start", "tool-input-delta"].includes(event.type)), "retain final arguments and results without duplicating streamed fragments");
     const checks = gradeChecks(c, o);
     assert.equal(checks.find(result => result.id.startsWith("brief_before_plan"))?.outcome, "pass");
     assert.equal(checks.find(result => result.detail.includes("searchPlaces"))?.outcome, "fail");
@@ -159,7 +179,7 @@ test("judge uses Responses structured output and returns evidence for each rubri
     const result = await judgeCase(c, observation);
     assert.equal(result.outcome, "pass");
     assert.equal(result.results.length, c.rubric.length);
-    assert.equal(request?.model, JUDGE_MODEL);
+    assert.equal(request?.model, "gpt-6.1-terra");
     assert.equal(request?.store, false);
     assert.equal(((request?.text as { format: { type: string } }).format).type, "json_schema");
   } finally {
@@ -169,13 +189,13 @@ test("judge uses Responses structured output and returns evidence for each rubri
 });
 
 test("injects a provider failure only after the brief is persisted", async () => {
-  const { functionStream, setToolRequest } = await import("./plan-fixture");
+  const { functionStream } = await import("./plan-fixture");
   process.env.OPENAI_API_KEY = "fixture";
   try {
     const c = (await loadCases("data/evaluation/cases.json")).cases.find(item => item.id === "R10")!;
     let calls = 0;
-    const mock: typeof fetch = async (_url, init) => {
-      setToolRequest(JSON.parse(String(init?.body))); calls++;
+    const mock: typeof fetch = async () => {
+      calls++;
       if (calls === 1) return functionStream("saveBrief", { markdown: "# Preferences\nFlorence art for two.", expectedRevision: 0 });
       throw new Error("The injected error should prevent a second provider call");
     };
@@ -198,18 +218,17 @@ test("ambiguous-document fixture is isolated and contains both occurrences", asy
 });
 
 test("lost commit response occurs after publication and cannot duplicate the plan", async () => {
-  const { functionStream, setToolRequest, examplePlan, unknownBudget } = await import("./plan-fixture");
+  const { functionStream } = await import("./plan-fixture");
   process.env.OPENAI_API_KEY = "fixture";
   try {
     const c = (await loadCases("data/evaluation/cases.json")).cases.find(item => item.id === "X09")!;
     let call = 0;
-    const mock: typeof fetch = async (_url, init) => {
-      setToolRequest(JSON.parse(String(init?.body))); call++;
+    const mock: typeof fetch = async () => {
+      call++;
       if (call === 1) return functionStream("saveBrief", { markdown: "# Preferences\nRome for two.", expectedRevision: 0 });
-      if (call === 2) return functionStream("proposePlan", { plan: examplePlan(), authorizedItemIds: [] });
-      if (call === 3) return functionStream("proposeBudget", { budget: unknownBudget(), reviewed: true });
-      if (call === 4) return functionStream("resolveBudgetGaps", { gaps: [{ entryId: "stay", reason: "search_unavailable", explanation: "No price evidence available in this offline fixture." }] });
-      if (call === 5) return functionStream("commit", { summary: "Saved partial draft", handledInputIds: [] });
+      const draft = offlineDraftCalls()[call - 2];
+      if (draft) return functionStream(...draft);
+      if (call === 8) return functionStream("commit", { summary: "Saved partial draft", handledInputIds: [] });
       return providerStream();
     };
     const o = await executeCase(c, mock);
@@ -224,7 +243,12 @@ test("judge model override rejects deprecated and unverified model IDs", async (
   const previous = process.env.EVAL_JUDGE_MODEL;
   try {
     delete process.env.EVAL_JUDGE_MODEL;
-    assert.equal(judgeModel(), JUDGE_MODEL);
+    assert.equal(JUDGE_MODEL, "gpt-6.1-terra");
+    assert.equal(judgeModel(), "gpt-6.1-terra");
+    process.env.EVAL_JUDGE_MODEL = "gpt-6.1-terra";
+    assert.equal(judgeModel(), "gpt-6.1-terra");
+    process.env.EVAL_JUDGE_MODEL = "gpt-6-astra";
+    assert.throws(() => judgeModel(), /Unsupported EVAL_JUDGE_MODEL/);
     process.env.EVAL_JUDGE_MODEL = "gpt-4o-2024-08-06";
     assert.throws(() => judgeModel(), /Unsupported EVAL_JUDGE_MODEL/);
     process.env.EVAL_JUDGE_MODEL = "unverified-model";
@@ -309,13 +333,13 @@ test("selected injection file is delivered as untrusted context", async () => {
 });
 
 test("controlled research is returned as a readable tool result without a live research request", async () => {
-  const { functionStream, setToolRequest } = await import("./plan-fixture");
+  const { functionStream } = await import("./plan-fixture");
   process.env.OPENAI_API_KEY = "fixture";
   try {
     const c = (await loadCases("data/evaluation/cases.json")).cases.find(item => item.id === "R03")!;
     let calls = 0;
-    const mock: typeof fetch = async (_url, init) => {
-      setToolRequest(JSON.parse(String(init?.body))); calls++;
+    const mock: typeof fetch = async () => {
+      calls++;
       return calls === 1 ? functionStream("researchWeb", { query: "Research a room price" }) : providerStream();
     };
     const o = await executeCase(c, mock);
@@ -328,17 +352,18 @@ test("controlled research is returned as a readable tool result without a live r
 });
 
 test("concurrent writer fault rejects a stale commit and preserves the new note after recovery", async () => {
-  const { functionStream, setToolRequest } = await import("./plan-fixture");
+  const { functionStream } = await import("./plan-fixture");
   process.env.OPENAI_API_KEY = "fixture";
   try {
     const c = (await loadCases("data/evaluation/cases.json")).cases.find(item => item.id === "R08")!;
     let call = 0;
-    const mock: typeof fetch = async (_url, init) => {
-      setToolRequest(JSON.parse(String(init?.body))); call++;
-      const edit = { operations: [{ type: "updateDay", id: "day-2", fields: { title: "Relaxed day" } }], authorizedItemIds: [] };
-      if (call === 1 || call === 4) return functionStream("editPlan", edit);
-      if (call === 2 || call === 5) return functionStream("commit", { summary: "Updated day two", handledInputIds: [] });
-      if (call === 3) return functionStream("reloadWorkspace", {});
+    const mock: typeof fetch = async () => {
+      call++;
+      const edit = { operations: [{ type: "updateDay", id: "day-2", changes: { title: "Relaxed day" } }] };
+      if (call === 1 || call === 5) return functionStream("editPlan", edit);
+      if (call === 3 || call === 7) return functionStream("commit", { summary: "Updated day two", handledInputIds: [] });
+      if (call === 4) return functionStream("reloadWorkspace", {});
+      if (call === 2 || call === 6) return functionStream("editBudget", reviewBudget);
       return providerStream();
     };
     const o = await executeCase(c, mock);
@@ -370,6 +395,11 @@ test("forced rejected edit and late brief scenarios actually reach their intende
       const c = cases.find(item => item.id === id)!;
       const o = await executeCase(c, async () => providerStream());
       assert.equal(o.faultTriggered, true, id);
+      const results = o.trace.filter(event => event.type === "tool-output-available").map(event => event.output as { outcome: string; code: string; data?: { saved?: boolean; staged?: boolean } });
+      assert.equal(results[0].outcome, "succeeded", "The valid edit reaches authoring before the fault.");
+      assert.equal(o.trace.some(event => event.type === "tool-input-error"), false, "A legacy schema rejection must not stand in for the intended fault.");
+      if (id === "R07") assert.equal(results[1].code, "ARRANGEMENT_MISSING");
+      else { assert.equal(results[1].data?.saved, false); assert.equal(results[1].data?.staged, true); }
       const checks = gradeChecks(c, o);
       assert.equal(checks.find(check => check.id.startsWith(id === "R07" ? "rejection_observed" : "late_brief_staged"))?.outcome, "pass", id);
     }
@@ -377,15 +407,16 @@ test("forced rejected edit and late brief scenarios actually reach their intende
 });
 
 test("indeterminate commit fault never fabricates a receipt", async () => {
-  const { functionStream, setToolRequest } = await import("./plan-fixture");
+  const { functionStream } = await import("./plan-fixture");
   process.env.OPENAI_API_KEY = "fixture";
   try {
     const c = (await loadCases("data/evaluation/cases.json")).cases.find(item => item.id === "R15")!;
     let calls = 0;
-    const mock: typeof fetch = async (_url, init) => {
-      setToolRequest(JSON.parse(String(init?.body))); calls++;
-      if (calls === 1) return functionStream("editPlan", { operations: [{ type: "updateDay", id: "day-2", fields: { title: "Lighter day" } }], authorizedItemIds: [] });
-      if (calls === 2) return functionStream("commit", { summary: "Lighter day", handledInputIds: [] });
+    const mock: typeof fetch = async () => {
+      calls++;
+      if (calls === 1) return functionStream("editPlan", { operations: [{ type: "updateDay", id: "day-2", changes: { title: "Lighter day" } }] });
+      if (calls === 2) return functionStream("editBudget", reviewBudget);
+      if (calls === 3) return functionStream("commit", { summary: "Lighter day", handledInputIds: [] });
       return providerStream();
     };
     const o = await executeCase(c, mock);
@@ -407,33 +438,39 @@ test("zero-search injection produces actual empty catalog results", async () => 
 });
 
 test("duplicate tool-call injection repeats the identical call identity without adding two items", async () => {
-  const { functionStream, setToolRequest } = await import("./plan-fixture");
+  const { functionStream } = await import("./plan-fixture");
   process.env.OPENAI_API_KEY = "fixture";
   try {
     const c = (await loadCases("data/evaluation/cases.json")).cases.find(item => item.id === "R12")!;
     let calls = 0;
-    const mock: typeof fetch = async (_url, init) => {
-      setToolRequest(JSON.parse(String(init?.body))); calls++;
-      return calls === 1 ? functionStream("commit", { summary: "Added Forum", handledInputIds: [] }) : providerStream();
+    const mock: typeof fetch = async () => {
+      calls++;
+      if (calls === 1) return functionStream("editBudget", reviewBudget);
+      return calls === 2 ? functionStream("commit", { summary: "Added Forum", handledInputIds: [] }) : providerStream();
     };
     const o = await executeCase(c, mock);
     const checks = gradeChecks(c, o);
     assert.ok(checks.every(check => check.outcome === "pass"), JSON.stringify(checks));
     const plan = (o.after.plan as {plan:{days:{itemIds:string[]}[]}}).plan;
     assert.equal(plan.days.flatMap(day => day.itemIds).filter(id => id === "forum-eval").length, 1);
+    const replayed = o.trace.filter(event => event.type === "tool-input-available" && event.toolName === "editPlan");
+    assert.equal(replayed.length, 2);
+    assert.equal(replayed[0].toolCallId, replayed[1].toolCallId);
+    assert.deepEqual(replayed[0].input, replayed[1].input);
   } finally { if (oldKey === undefined) delete process.env.OPENAI_API_KEY; else process.env.OPENAI_API_KEY = oldKey; }
 });
 
 test("lost follow-up commit preserves the moved Pantheon and verifies the receipt", async () => {
-  const { functionStream, setToolRequest } = await import("./plan-fixture");
+  const { functionStream } = await import("./plan-fixture");
   process.env.OPENAI_API_KEY = "fixture";
   try {
     const c = (await loadCases("data/evaluation/cases.json")).cases.find(item => item.id === "R09")!;
     let calls = 0;
-    const mock: typeof fetch = async (_url, init) => {
-      setToolRequest(JSON.parse(String(init?.body))); calls++;
-      if (calls === 1) return functionStream("editPlan", { operations: [{ type: "moveItem", id: "pantheon", dayId: "day-3", index: 2 }], authorizedItemIds: [] });
-      if (calls === 2) return functionStream("commit", { summary: "Moved Pantheon", handledInputIds: [] });
+    const mock: typeof fetch = async () => {
+      calls++;
+      if (calls === 1) return functionStream("editPlan", { operations: [{ type: "moveItem", id: "pantheon", dayId: "day-3" }] });
+      if (calls === 2) return functionStream("editBudget", reviewBudget);
+      if (calls === 3) return functionStream("commit", { summary: "Moved Pantheon", handledInputIds: [] });
       return providerStream();
     };
     const o = await executeCase(c, mock);

@@ -15,31 +15,57 @@ type SessionState = {
 };
 type Transport = { load: typeof loadPlan; save: typeof updatePlan };
 const transport: Transport = { load: loadPlan, save: updatePlan };
-const message = (error: unknown) => error instanceof Error ? error.message : "Could not update the plan.";
+const message = (error: unknown) =>
+  error instanceof Error ? error.message : "Could not update the plan.";
 
 export function emptyPlan(): Plan {
-  const day = (id: string) => ({ id, title: "Open day", itemIds: [], startLocation: null, endLocation: null });
-  return { startDate: null, days: [day("day-1"), day("day-2"), day("day-3")], items: {}, notes: [] };
+  const day = (id: string) => ({
+    id,
+    title: "Open day",
+    itemIds: [],
+    startLocation: null,
+    endLocation: null,
+  });
+  return {
+    startDate: null,
+    days: [day("day-1"), day("day-2"), day("day-3")],
+    items: {},
+    notes: [],
+  };
 }
 
 /** One session per project. Both presentation and controls use this snapshot. */
 export class PlanSession {
-  private state: SessionState = { data: null, loading: true, busy: false, pending: null, error: "", notice: "", editing: false, failure: null };
+  private state: SessionState = {
+    data: null,
+    loading: true,
+    busy: false,
+    pending: null,
+    error: "",
+    notice: "",
+    editing: false,
+    failure: null,
+  };
   private listeners = new Set<() => void>();
   private read: AbortController | null = null;
   private version = 0;
   private refreshQueued = false;
   private stopped = false;
 
-  constructor(private reference: string, private io: Transport = transport) {}
+  constructor(
+    private reference: string,
+    private io: Transport = transport,
+  ) {}
   getSnapshot = () => this.state;
   subscribe = (listener: () => void) => {
     this.listeners.add(listener);
-    return () => { this.listeners.delete(listener); };
+    return () => {
+      this.listeners.delete(listener);
+    };
   };
   private patch(update: Partial<SessionState>) {
     this.state = { ...this.state, ...update };
-    this.listeners.forEach(listener => listener());
+    this.listeners.forEach((listener) => listener());
   }
   private cancelRead() {
     this.read?.abort();
@@ -78,9 +104,14 @@ export class PlanSession {
       if (controller.signal.aborted || version !== this.version) return;
       if (data.revision < (this.state.data?.revision ?? -1)) return;
       this.refreshQueued = false;
-      this.patch({ data, error: "", ...(discardPending ? { pending: null, failure: null, notice: "Latest plan loaded." } : {}) });
+      this.patch({
+        data,
+        error: "",
+        ...(discardPending ? { pending: null, failure: null, notice: "Latest plan loaded." } : {}),
+      });
     } catch (error) {
-      if (!controller.signal.aborted && version === this.version) this.patch({ error: message(error) });
+      if (!controller.signal.aborted && version === this.version)
+        this.patch({ error: message(error) });
     } finally {
       if (version === this.version) this.patch({ loading: false });
     }
@@ -93,8 +124,19 @@ export class PlanSession {
     const plan = structuredClone(data.plan ?? emptyPlan());
     try {
       change(plan);
-      const errors = inspectPlan(plan, data.places, data.plan ?? undefined).findings.filter(finding => finding.severity === "error");
-      if (errors.length) throw new Error(errors.map(error => error.code === "shape" ? "Some plan details are incomplete or invalid. Review the plan before saving." : error.message).join(" "));
+      const errors = inspectPlan(plan, data.places, data.plan ?? undefined).findings.filter(
+        (finding) => finding.severity === "error",
+      );
+      if (errors.length)
+        throw new Error(
+          errors
+            .map((error) =>
+              error.code === "shape"
+                ? "Some plan details are incomplete or invalid. Review the plan before saving."
+                : error.message,
+            )
+            .join(" "),
+        );
     } catch (error) {
       this.patch({ error: message(error), notice: "" });
       return false;
@@ -102,24 +144,50 @@ export class PlanSession {
     return this.save({ plan, revision: data.revision, requestId: crypto.randomUUID() });
   }
   retry() {
-    return this.state.pending && this.state.failure === "retryable" ? this.save(this.state.pending) : Promise.resolve(false);
+    return this.state.pending && this.state.failure === "retryable"
+      ? this.save(this.state.pending)
+      : Promise.resolve(false);
   }
 
   // Preserve retry identity.
   private async save(change: PendingSave): Promise<boolean> {
     if (this.state.busy) return false;
     this.cancelRead();
-    this.patch({ busy: true, loading: false, pending: change, error: "", failure: null, notice: "" });
+    this.patch({
+      busy: true,
+      loading: false,
+      pending: change,
+      error: "",
+      failure: null,
+      notice: "",
+    });
     let saved = false;
     try {
-      const result = await this.io.save(this.reference, change.revision, change.plan, change.requestId);
+      const result = await this.io.save(
+        this.reference,
+        change.revision,
+        change.plan,
+        change.requestId,
+      );
       const data = this.state.data!;
       this.patch({ data: { ...data, ...result.snapshot }, pending: null, notice: "Plan saved." });
       saved = true;
     } catch (error) {
-      this.patch({ ...(error instanceof PlanRequestError && error.code === "PLAN_FEASIBILITY" ? { pending: null } : {}),
-        error: message(error), failure: error instanceof PlanRequestError && error.status === 409 ? "conflict"
-        : error instanceof PlanRequestError && error.status >= 400 && error.status < 500 && error.status !== 408 ? "rejected" : "retryable" });
+      this.patch({
+        ...(error instanceof PlanRequestError && error.code === "PLAN_FEASIBILITY"
+          ? { pending: null }
+          : {}),
+        error: message(error),
+        failure:
+          error instanceof PlanRequestError && error.status === 409
+            ? "conflict"
+            : error instanceof PlanRequestError &&
+                error.status >= 400 &&
+                error.status < 500 &&
+                error.status !== 408
+              ? "rejected"
+              : "retryable",
+      });
     } finally {
       this.patch({ busy: false });
       if (saved && this.refreshQueued && !this.stopped) void this.refresh();

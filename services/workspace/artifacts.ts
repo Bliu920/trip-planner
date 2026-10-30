@@ -5,11 +5,13 @@ import { applyDocumentOperations, readTextDocument } from "@/services/documents"
 import { createdTextFormat, fileFormat, fileRenameError } from "@/lib/file-types";
 import type { DocumentEdit, TextDocument } from "@/lib/documents/text";
 import type { DocumentSummary } from "@/lib/documents/types";
-import type { AgentEnvironment, ArtifactEnvironment, ArtifactView } from "@/services/agent/contracts";
+import type { AgentEnvironment, ArtifactEnvironment, ArtifactView } from "@/services/assistant/agent/contracts";
 import type { WorkspaceSnapshot } from "./session";
 import { workspaceRpc, WorkspaceError } from "./database";
 import { DraftState } from "./draft";
-import { planView, budgetView, planQuality } from "./views";
+import { visibleSources } from "./evidence";
+import { planView, budgetView } from "./views";
+import { reviewPlanning } from "@/lib/planning-review";
 export type ArtifactState = {
   snapshot(): WorkspaceSnapshot;
   receipt(): { summary: string; revision: number; operation_id: string } | null;
@@ -19,9 +21,12 @@ export type ArtifactState = {
   contextId(): string;
   context(): TextDocument | null;
   review(): boolean;
+  findings?(): import("@/lib/plan").PlanFinding[];
 };
 export function workspaceArtifacts(reference: string, environment: AgentEnvironment, state: ArtifactState): ArtifactEnvironment {
   const draft = new DraftState();
+  const knownPlan = new Set(Object.keys(state.snapshot().plan?.items ?? {}));
+  const knownCosts = new Set(state.snapshot().budget?.entries.map(entry => entry.id) ?? []);
   let headRevision = state.snapshot().revision;
   const selectedDocuments = new Set<string>();
   const availability = (doc: { id: string; mediaType: string }) => fileFormat(doc.mediaType)?.editor === "text" ? "readable" : selectedDocuments.has(doc.id) ? "provided_in_current_request" : "select_original_in_chat";
@@ -43,20 +48,26 @@ export function workspaceArtifacts(reference: string, environment: AgentEnvironm
   const links = () => effectiveBudget()?.entries.flatMap(entry => entry.planItemIds.filter(id => !effectivePlan()?.items[id]).map(id => ({ code: "BUDGET_LINK", entryId: entry.id, itemId: id }))) ?? [];
   const manifest = () => {
     const docs = documents("effective"), brief = docs.find(doc => doc.id === state.contextId());
+    const review = reviewPlanning(effectivePlan(), effectiveBudget(), !!environment.initialGeneration, draft.token, state.findings?.(), state.review(), !!state.plan() && !!state.budget());
     return {
       ...stamp(), currentInput: environment.source, pendingInputs: state.snapshot().pendingInputs,
-      brief: brief ? { id: brief.id, name: brief.name, revision: brief.revision, contentRevision: brief.contentRevision, proposedContentRevision: brief.proposedContentRevision, draft: brief.draft ?? false } : null,
+      brief: brief ? { id: brief.id, name: brief.name, revision: brief.revision, contentRevision: brief.contentRevision, proposedContentRevision: brief.proposedContentRevision, draft: brief.draft ?? false, ...environment.documentEvidence?.(brief.id, brief.proposedContentRevision ?? brief.contentRevision!, brief.name) } : null,
       plan: planView(effectivePlan(), { view: "effective", selector: "summary", ids: [] }),
       budget: { ...budgetView(effectiveBudget(), { view: "effective", selector: "summary", ids: [] }), needsReview: state.review() },
       documents: docs.map(({ id, name, kind, mediaType, size, revision, contentRevision, draft, proposedContentRevision }) => ({ id, name, kind, mediaType, size, revision, contentRevision, draft, proposedContentRevision, availability: availability({ id, mediaType }) })),
+      hasWorkingChanges: !!state.plan() || !!state.budget() || state.edits.size > 0,
+      pendingCorrections: draft.pendingCorrections(),
       rejectedEdits: [...draft.failures].map(([artifact, message]) => ({ artifact, message })),
+      requiredBeforeSave: review.blockers,
+      review,
       lastVerifiedFinalSave: state.receipt(),
+      ...visibleSources(environment.evidenceSources?.() ?? [], effectivePlan(), effectiveBudget()),
     };
   };
   const readDocument: ArtifactEnvironment["readDocument"] = async ({ id, view, contentRevision }) => {
     if (contentRevision !== null && view !== "saved") throw new WorkspaceError("Historical content requires saved view.", 400);
     const base = metadata(id), edit = view === "effective" && contentRevision === null ? state.edits.get(id) : undefined;
-    if (edit) return { ...stamp(view), exists: true, id, name: edit.name, kind: edit.kind, content: edit.markdown, revision: base?.revision ?? 0, contentRevision: base?.contentRevision ?? 0, proposedContentRevision: (base?.contentRevision ?? 0) + 1, draft: true };
+    if (edit) return { ...stamp(view), exists: true, id, name: edit.name, kind: edit.kind, content: edit.markdown, revision: base?.revision ?? 0, contentRevision: base?.contentRevision ?? 0, proposedContentRevision: (base?.contentRevision ?? 0) + 1, draft: true, ...environment.documentEvidence?.(id, (base?.contentRevision ?? 0) + 1, edit.name) };
     if (!base) return { ...stamp(view), exists: false, id };
     if (fileFormat(base.mediaType)?.editor !== "text" && selectedDocuments.has(id)) return { ...stamp(view), exists: true, id, name: base.name, available: true, providedInCurrentRequest: true, instruction: "The original file was successfully supplied in this request. Use that attached content; no extracted text is returned here." };
     if (fileFormat(base.mediaType)?.editor !== "text") return { ...stamp(view), exists: true, id, name: base.name, available: false, code: "NEEDS_SELECTION", instruction: "Select the original file in chat to provide its contents." };
@@ -65,7 +76,7 @@ export function workspaceArtifacts(reference: string, environment: AgentEnvironm
     let reading = cache.get(key);
     if (!reading) { reading = readTextDocument(reference, id, revision); cache.set(key, reading); reading.catch(() => cache.delete(key)); }
     const text = await reading;
-    return { ...stamp(view), exists: true, ...text, name: base.name, revision: base.revision, content: text.markdown, markdown: undefined, ...(contentRevision !== null ? { editToken: undefined, historical: true } : {}) };
+    return { ...stamp(view), exists: true, ...text, name: base.name, revision: base.revision, content: text.markdown, markdown: undefined, ...environment.documentEvidence?.(id, revision, base.name), ...(contentRevision !== null ? { editToken: undefined, historical: true } : {}) };
   };
   const invalidateEvidence = (id: string) => {
     const revision = (metadata(id)?.contentRevision ?? 0) + 1;
@@ -74,10 +85,13 @@ export function workspaceArtifacts(reference: string, environment: AgentEnvironm
   };
   const stageText = async (edit: DocumentEdit) => {
     const result = await environment.stageDocument(edit) as { staged: boolean; id: string; contentRevision: number };
-    return { ...result, draft: true, contentRevision: metadata(edit.id)?.contentRevision ?? 0, proposedContentRevision: result.contentRevision };
+    return { ...result, draft: true, contentRevision: metadata(edit.id)?.contentRevision ?? 0, proposedContentRevision: result.contentRevision, ...environment.documentEvidence?.(edit.id, result.contentRevision, edit.name) };
   };
-  const mutation = <T>(token: string, key: string, work: () => Promise<T>) => draft.mutate(token, key, work);
+  const mutation = <T>(token: string, key: string, work: () => Promise<T>, persistent = false) => draft.mutate(token, key, work, persistent);
   return {
+    snapshotWork: () => ({ draft: draft.snapshot(), knownPlan: [...knownPlan], knownCosts: [...knownCosts] }),
+    restoreWork(value) { draft.restore(value.draft); knownPlan.clear(); value.knownPlan.forEach(id => knownPlan.add(id)); knownCosts.clear(); value.knownCosts.forEach(id => knownCosts.add(id)); },
+    wasKnown: (artifact, id) => (artifact === "plan" ? knownPlan : knownCosts).has(id),
     provideSelectedDocuments(ids) { selectedDocuments.clear(); ids.forEach(id => selectedDocuments.add(id)); },
     manifest,
     async readEnvironment() {
@@ -102,20 +116,33 @@ export function workspaceArtifacts(reference: string, environment: AgentEnvironm
     readDocument,
     createPlan: (token, plan, authorized) => mutation(token, "plan", async () => {
       if (effectivePlan()) throw new WorkspaceError("A Plan already exists. Use editPlan.", 400, "ALREADY_EXISTS");
-      return environment.propose(plan, authorized);
+      const result = await environment.propose(plan, authorized);
+      if (result.valid || result.staged) Object.keys(plan.items).forEach(id => knownPlan.add(id));
+      return result;
     }),
-    editPlan: (token, operations, authorized) => mutation(token, "plan", async () => {
+    editPlan: (token, operations, authorized, allowScheduleConflicts = false) => mutation(token, "plan", async () => {
       if (!effectivePlan()) throw new WorkspaceError("Create a Plan first.", 400);
-      return environment.propose(applyPlanOperations(effectivePlan()!, operations), authorized);
+      if (!operations.length) return { valid: true, staged: true, unchanged: true, applied: { itemIds: [], dayIds: [] } };
+      const before = effectivePlan()!, candidate = applyPlanOperations(before, operations);
+      const result = await environment.propose(candidate, authorized, allowScheduleConflicts);
+      const accepted = result.valid || result.staged;
+      if (accepted) [...Object.keys(before.items), ...Object.keys(candidate.items)].forEach(id => knownPlan.add(id));
+      return { ...result, applied: accepted ? { itemIds: [...new Set([...Object.keys(before.items), ...Object.keys(candidate.items)])].filter(id => JSON.stringify(before.items[id]) !== JSON.stringify(candidate.items[id])), dayIds: candidate.days.filter((day, index) => JSON.stringify(day) !== JSON.stringify(before.days[index])).map(day => day.id) } : null, previousAcceptedContentRetained: !accepted };
     }),
     createBudget: (token, budget, reviewed) => mutation(token, "budget", async () => {
       if (effectiveBudget()) throw new WorkspaceError("A Budget already exists. Use editBudget.", 400, "ALREADY_EXISTS");
-      return environment.proposeBudget!(budget, reviewed);
+      const result = await environment.proposeBudget!(budget, reviewed);
+      budget.entries.forEach(entry => knownCosts.add(entry.id));
+      return result;
     }),
     editBudget: (token, operations) => mutation(token, "budget", async () => {
       if (!effectiveBudget()) throw new WorkspaceError("Create a Budget first.", 400);
+      if (!operations.length) return { valid: true, staged: true, unchanged: true, applied: { entryIds: [] } };
       const result = applyBudgetOperations(effectiveBudget()!, operations);
-      return environment.proposeBudget!(result.budget, result.reviewed);
+      const before = effectiveBudget()!;
+      const accepted = await environment.proposeBudget!(result.budget, result.reviewed);
+      [...before.entries, ...result.budget.entries].forEach(entry => knownCosts.add(entry.id));
+      return { ...accepted as object, applied: { entryIds: [...new Set([...before.entries, ...result.budget.entries].map(entry => entry.id))].filter(id => JSON.stringify(before.entries.find(entry => entry.id === id)) !== JSON.stringify(result.budget.entries.find(entry => entry.id === id))) } };
     }),
     createDocument: (token, name, kind, content) => mutation(token, "documents", async () => {
       const id = kind === "planning_context" ? state.contextId() : randomUUID();
@@ -138,12 +165,13 @@ export function workspaceArtifacts(reference: string, environment: AgentEnvironm
       headRevision = state.snapshot().revision;
       invalidateEvidence(state.contextId());
       return result.staged ? { ...result, draft: true, proposedContentRevision: result.contentRevision, contentRevision: metadata(state.contextId())?.contentRevision ?? 0 } : result;
-    }),
+    }, true),
     resolveBudgetGaps: (token, gaps) => mutation(token, "budget", () => environment.resolveBudgetGaps!(gaps)),
     async inspectChanges() {
       const verified = await environment.verifyCommit();
       headRevision = verified.snapshot && typeof verified.snapshot === "object" && "revision" in verified.snapshot ? Number(verified.snapshot.revision) : headRevision;
       const before = state.snapshot(), plan = effectivePlan(), budget = effectiveBudget();
+      const review = reviewPlanning(plan, budget, !!environment.initialGeneration, draft.token, state.findings?.(), state.review(), !!state.plan() && !!state.budget());
       return {
         ...manifest(), saved: verified.saved, receipt: verified.receipt,
         changed: { plan: !!state.plan(), budget: !!state.budget(), documents: [...state.edits.keys()] },
@@ -157,8 +185,8 @@ export function workspaceArtifacts(reference: string, environment: AgentEnvironm
           budgetFields: { before: summarize(before.budget), after: summarize(budget) },
           documents: [...state.edits.values()].map(edit => ({ id: edit.id, before: metadata(edit.id) ? { name: metadata(edit.id)!.name, contentRevision: metadata(edit.id)!.contentRevision } : null, after: { name: edit.name, proposedContentRevision: (metadata(edit.id)?.contentRevision ?? 0) + 1, bytes: Buffer.byteLength(edit.markdown) } })),
         },
-        blockers: [...draft.failures].map(([artifact, message]) => ({ artifact, message })).concat(links().map(finding => ({ artifact: `budget:${finding.entryId}`, message: `Missing Plan item ${finding.itemId}.` }))),
-        readiness: planQuality(plan, budget),
+        blockers: [...draft.failures].map(([artifact, message]) => ({ artifact, message })).concat(review.blockers),
+        readiness: { ready: review.qualityComplete, findings: [...review.blockers, ...review.findings].map(issue => issue.message), advisory: true },
       };
     },
     reload: token => mutation(token, "reload", async () => {
@@ -177,13 +205,15 @@ export function workspaceArtifacts(reference: string, environment: AgentEnvironm
       if (verified.saved) return { ...verified, editToken: draft.token };
       draft.assert(token); draft.assertReady();
       if (links().length && state.budget()) throw new WorkspaceError("Repair linked Budget costs before saving.", 400, "BUDGET_LINK");
-      return mutation(token, "commit", () => environment.commit(summary, handled));
+      return mutation(token, "commit", () => environment.commit(summary, handled), true);
     },
     rejectInput(tool, input) {
+      if (draft.input(tool, input)) return;
       const object = input && typeof input === "object" ? input as { id?: string } : {};
-      const key = /Plan$/.test(tool) ? "plan" : /Budget$|BudgetGaps$/.test(tool) ? "budget" : tool === "saveBrief" ? `documents:${state.contextId()}` : /Document$/.test(tool) ? object.id && (metadata(object.id) || state.edits.has(object.id)) ? `documents:${object.id}` : "documents" : null;
+      const key = /Plan$|^addDayActivities$|^addStay$/.test(tool) ? "plan" : /Budget$|BudgetGaps$|^addBudgetCosts$/.test(tool) ? "budget" : tool === "saveBrief" ? `documents:${state.contextId()}` : /Document$/.test(tool) ? object.id && (metadata(object.id) || state.edits.has(object.id)) ? `documents:${object.id}` : "documents" : null;
       if (key) draft.reject(key, "Correct the malformed tool input before saving.");
     },
+    resolveInput(tool, input) { draft.input(tool, input, true); },
   };
 }
 function changedIds(before: Record<string, unknown>, after: Record<string, unknown>) {

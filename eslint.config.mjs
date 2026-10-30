@@ -6,8 +6,8 @@ const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
   {
-    files: ["services/agent/**/*.ts"],
-    ignores: ["services/agent/actions/index.ts"],
+    files: ["services/assistant/agent/**/*.ts"],
+    ignores: ["services/assistant/agent/actions/index.ts"],
     rules: {
       "no-restricted-imports": ["error", { paths: [{ name: "ai", importNames: ["tool", "dynamicTool"], message: "Register application tools through actions/actionTool so results and effects are checked." }] }],
     },

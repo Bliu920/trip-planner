@@ -4,12 +4,11 @@ import type { PGlite } from "@electric-sql/pglite";
 import { createDatabase, seed, databaseFetch, reference, conversation } from "@/tests/chat-fixture";
 import { romeFixture } from "./fixtures";
 import { fixture } from "@/tests/fixtures/plan/fixtures";
-import { fixturePricedBudget, researchResponse, setToolRequest, functionStream } from "@/tests/plan-fixture";
-import { handleChat } from "@/services/chat";
-import { beginTurn, saveReply, loadConversation } from "@/services/conversations";
+import { fixturePricedBudget, researchResponse, functionStream } from "@/tests/plan-fixture";
+import { handleChat } from "@/services/assistant";
+import { beginTurn, saveReply, loadConversation } from "@/services/assistant/conversation-store";
 import { openSession } from "@/services/workspace";
 import catalog from "@/data/italy.json";
-import { catalogItem } from "@/lib/plan/commands";
 import { fileFormat } from "@/lib/file-types";
 import { getPlan, savePlan } from "@/services/plans";
 import { getBudget, saveBudget } from "@/services/budgets";
@@ -43,7 +42,7 @@ function parseTrace(text: string): Trace[] {
     let value: Record<string, unknown>;
     try { value = JSON.parse(line.slice(6)); } catch { continue; }
     const type = String(value.type ?? "");
-    if (!type.startsWith("tool-")) continue;
+    if (!["tool-input-available", "tool-input-error", "tool-output-available", "tool-output-error"].includes(type)) continue;
     trace.push({ type, ...(typeof value.toolName === "string" ? { toolName: value.toolName } : {}),
       ...(typeof value.toolCallId === "string" ? { toolCallId: value.toolCallId } : {}),
       ...(value.input === undefined ? {} : { input: value.input }),
@@ -80,24 +79,22 @@ export async function executeCase(c: EvalCase, modelFetch: typeof fetch = global
             faultTriggered = true; providerStatuses.push(200);
             return new Response(replay, { headers: { "Content-Type": "text/event-stream" } });
           }
-          setToolRequest(JSON.parse(String(init?.body)));
           const place = catalog.find(p => p.id === "place_004");
           if (!place) throw new Error("Forum fixture missing");
           const result = c.fault === "zero_search"
             ? scriptedSteps === 1 ? functionStream("saveBrief", { markdown: "# Preferences\nOnly step-free venues; this is essential.", expectedRevision: 0 })
               : functionStream("searchPlaces", { tagsAll: ["step-free"] })
-            : functionStream("editPlan", { operations: [{ type: "addItem", item: catalogItem(place, "forum-eval"), dayId: "day-1", index: null }], authorizedItemIds: [] });
+            : functionStream("editPlan", { operations: [{ type: "addActivity", id: "forum-eval", title: place.name, placeId: place.id, dayId: "day-1", startTime: "16:00" }] });
           if (c.fault === "duplicate_edit") replay = await result.clone().text();
           if (scriptedSteps === 2) faultTriggered = true;
           providerStatuses.push(200); return result;
         }
         if (["rejected_edit", "late_brief"].includes(c.fault) && scriptedSteps < 2) {
-          setToolRequest(JSON.parse(String(init?.body)));
           scriptedSteps++; simulatedRequests++;
           const response = scriptedSteps === 1
-            ? functionStream("editPlan", { operations: [{ type: "updateDay", id: "day-2", fields: { title: "Lighter day" } }], authorizedItemIds: [] })
+            ? functionStream("editPlan", { operations: [{ type: "updateDay", id: "day-2", changes: { title: "Lighter day" } }] })
             : c.fault === "rejected_edit"
-              ? functionStream("editPlan", { operations: [{ type: "updateDay", id: "missing-day", fields: { title: "Invalid change" } }], authorizedItemIds: [] })
+              ? functionStream("editPlan", { operations: [{ type: "updateDay", id: "missing-day", changes: { title: "Invalid change" } }] })
               : functionStream("saveBrief", { markdown: romeFixture().brief.replace("relaxed pace.", "relaxed pace; free afternoons."), expectedRevision: 1 });
           if (scriptedSteps === 2) faultTriggered = true;
           providerStatuses.push(200);

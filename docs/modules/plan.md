@@ -1,7 +1,13 @@
 # Plan
 
 Status: implemented locally. Apply the forward migrations before using it with hosted storage.
-Last updated: 2026-10-29.
+Last updated: 2026-10-30.
+
+## Incremental agent assembly
+
+The agent initializes an absent itinerary using only startDate and three stable day IDs/titles. lib/plan/initial.ts builds valid empty day collections. editPlan then adds stays, activities, meals, travel and relevant notes in small batches, normally one day at a time. Existing targeted item, date, timing, placement and day-boundary operations remain available. Full replacements remain an internal compatibility operation, outside the current model-facing schema.
+
+Accepted batches stay readable within the current run; a rejected batch leaves them intact and must be corrected before publication. Existing source, protection and journey validation still applies. Initial empty days cannot be committed as a completed itinerary. Final publication remains atomic with Budget and related documents. This does not persist partial itineraries between requests. See [Agent](agent.md#incremental-initial-creation) for the workflow and verification boundary.
 
 ## Responsibility
 
@@ -179,7 +185,7 @@ The trip summary and every DayCard remain mounted in one keyed content stage. Ov
 |---|---|
 | Open card/image/title | Expand day without choosing an activity; show map and day spending |
 | Select overview activity | Expand its day and show that activity's details |
-| Select expanded activity | Update details and center its map pin, including repeated selection after fit/pan |
+| Select expanded activity | Select and center a different activity; select the active activity again to clear its details and map emphasis |
 | Select map pin | Update activity details, focus and reveal the matching timeline button |
 | Edit activity | Invoke Canvas's existing editor and save session |
 | All days | Animate the current day back into overview, preserve the current scroll and focus its card/activity |
@@ -188,7 +194,7 @@ The header has one shared metadata/navigation slot. Its two overlapping grid lay
 
 The existing `presentation/model.ts` projects saved Plan and catalog facts into optional Stop fields: coordinates, location, end time, photo, description, practical details and HTTP(S) evidence links. Referenced locations resolve from the same Plan. Missing coordinates, prices or duration stay unknown. Catalog hours and booking requirements are never treated as verified availability. Place-specific photos in details remain separate from illustrative fallback covers. The same day-cover image is not repeated beside itself in activity details.
 
-The right column shows a selected-activity detail card above one map and Budget's existing day-spending card. No activity is chosen arbitrarily on day opening. Selected activity details use a fixed 360px frame: a fixed 96px title/fact summary and an independently scrolling reading region. Title/edit controls stay outside scrolling. The heading allows two lines with the full name retained in its title/accessibility text, and facts have a fixed two-line area. Description, images, booking notes, optional actions and expanded evidence remain in the keyboard-focusable reading region. Scrollbar space and image height are reserved. Switching activities resets the reading position through the existing activity key. Short content leaves intentional whitespace. There is no empty 360px placeholder before an activity is selected. A fixed 52px map-caption row also prevents long/missing selected-place labels from moving day spending. On narrow screens the columns stack. Activity selection waits for card motion to finish before smoothly revealing details; Day timeline smoothly returns to the selected activity. Reduced motion uses immediate scrolling. Native buttons preserve keyboard access. Editing and optional changes honor existing save locks; browsing stays usable.
+The right column shows a selected-activity detail card above one map and Budget's existing day-spending card. No activity is chosen arbitrarily on day opening. Selected activity details use a fixed 360px card with a white surface, subtle border and rounded corners. The entire keyboard-focusable card owns vertical scrolling, including its compact title, edit control, facts, image, description, booking notes, optional actions and expanded evidence. The header has no reserved height and scrolls away with the content. Facts wrap naturally without a nested scrollbar. Scrollbar space and image height are reserved. Switching activities resets the reading position through the existing activity key. Short content leaves intentional whitespace. There is no empty 360px placeholder before an activity is selected. A fixed 52px map-caption row also prevents long/missing selected-place labels from moving day spending. On narrow screens the columns stack. Activity selection waits for card motion to finish before smoothly revealing details; Day timeline smoothly returns to the selected activity. Reduced motion uses immediate scrolling. Native buttons preserve keyboard access. Editing and optional changes honor existing save locks; browsing stays usable.
 
 Budget integration uses `renderDayContext(day)` through PlanEditor and Canvas. Workspace supplies Budget's provider-connected DayBudgetCard with the day's item IDs. Plan does not fetch, store or calculate prices. Subtotals, sources, missing prices and review state derive from the existing Budget snapshot. Whole-trip Budget remains in the persistent summary. See [Budget](budget.md).
 
@@ -231,3 +237,15 @@ Follow-up: timeline connectors remain continuous across all period boundaries. P
 ## Routes and researched hotels
 
 October 29, 2026: Plan now accepts sourced hotel stays with the restaurant-style web identity/address fields and host-issued map references. Supplied attractions and user bookings retain existing protections. Shared timing includes start plus maximum duration. Agent proposals, direct saves and commit check derived journeys; unverified drafts remain distinct from checked routes. See [Locations and routes](geo.md) for evidence, cache, matching and status behavior.
+
+## Located places and timeline emphasis
+
+October 30, 2026: the map remains day context while individual activities change. day-view/locations.ts derives one immutable position view from saved locations and returned journey endpoint evidence; the selected details and map share it. Unchosen venues display Place not chosen yet, known but unlocated addresses display Not located on map, and location-free rest/free periods do not show missing-location prompts. Omitted stops never acquire pins. Days without any positioned activity or stay render no map section.
+
+Located selection highlights and centers its pin. Clicking an already selected activity or map pin clears selection, details and directions while retaining the day view and map. An unlocated selection clears prior pin emphasis and directions without changing the viewport or remounting the map. New map selections focus and reveal the corresponding timeline activity; map-origin deselection keeps focus on its pin. Pins retain schedule position numbers and H for stays, with full accessible names. Visible short names are collision-filtered against names, pins and map edges; a selected name has priority and may wrap. Labels use explicit content width bounded by the map, preventing long unbroken words from collapsing into narrow columns. On-map names shift away from edges with their pointer adjusted, or open below a pin when there is no room above. Names are inserted as text, never HTML. Geometry and selection have separate lifecycle ownership so tile loading does not unexpectedly recenter a user's view.
+
+Timeline rows show activity names, timing, duration and icons without small photos or photo-specific responsive layout. Shapes distinguish food, visits, rest and transport. Sightseeing destinations (sight, garden and viewpoint kinds) use the Italian flag red (#ce2b37) for icon and title accents, with a pale red icon background; meals, rest and other activities retain the muted green palette. This distinction follows activity kind rather than photo or coordinate availability. Existing illustrative photo metadata is retained by the editor and excluded from full activity-detail imagery; day cover fallbacks remain a separate visual role. The continuous timeline rail, overview period grouping, detailed times, fixed-height detail card, shared header and overview/day motion remain unchanged.
+
+Verification uses isolated in-memory trip data and the actual workspace UI. No model invocation, real trip mutation or migration is needed. See docs/tasks/main-map-timeline for focused regression and browser evidence.
+
+October 30, 2026: the shared sightseeing accent uses --pp-event-accent and --pp-event-tint in presentation.css. Multi-day overview and expanded single-day timelines use the same rules, preserving layout, selection and other activity colors.

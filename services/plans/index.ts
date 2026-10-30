@@ -1,8 +1,8 @@
 import "server-only";
-import { checkJourneys, inspectGeoSources, journeySummary } from "@/services/feasibility";
+import { checkJourneys, inspectGeoSources, journeySummary } from "@/services/places/feasibility";
 import { REFERENCE_PATTERN } from "@/lib/trips/types";
 import { inspectPlan, type PlanSnapshot } from "@/lib/plan";
-import { loadDayCoverPhotos } from "@/services/catalog";
+import { loadDayCoverPhotos } from "@/services/places/catalog";
 import { places } from "./catalog";
 import { planRpc, PlanError } from "./database";
 import { inspectVenueSources } from "./venues";

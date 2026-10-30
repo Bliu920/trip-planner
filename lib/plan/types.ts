@@ -49,8 +49,11 @@ export type PlanNote = {
 };
 
 export type ResearchedLocation = {
-  label: string; address: string; city: string;
-  latitude: number | null; longitude: number | null;
+  label: string;
+  address: string;
+  city: string;
+  latitude: number | null;
+  longitude: number | null;
   geoEvidenceId?: string | null;
   basis: Basis;
 };

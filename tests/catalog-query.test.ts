@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { queryCatalog, describeCatalog, filterPlaces, type Place } from "../lib/catalog";
-import { getPlaces, readPlaces } from "../services/catalog";
+import { getPlaces, readPlaces } from "../services/places/catalog";
 
 const places = getPlaces();
 

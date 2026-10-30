@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { after, afterEach, before, beforeEach, test } from "node:test";
 import type { PGlite } from "@electric-sql/pglite";
-import { functionStream, setToolRequest } from "./plan-fixture";
+import { functionStream } from "./plan-fixture";
 import { activityEntries } from "../lib/activity/model";
-import { handleChat } from "../services/chat/index";
-import { loadConversation } from "../services/conversations/index";
+import { handleChat } from "../services/assistant";
+import { loadConversation } from "../services/assistant/conversation-store";
 import { createDatabase, seed, databaseFetch, providerStream, reference, conversation, otherTrip } from "./chat-fixture";
 
 let db: PGlite;
@@ -12,7 +12,7 @@ const originalFetch = globalThis.fetch;
 const originalEnv = Object.fromEntries(["OPENAI_API_KEY", "OPENAI_MODEL", "SUPABASE_URL", "SUPABASE_SECRET_KEY"].map(key => [key, process.env[key]]));
 
 test("planner model configuration accepts explicit Luna and rejects obsolete or unknown overrides", async () => {
-  const { agentModel, DEFAULT_MODEL } = await import("../services/agent");
+  const { agentModel, DEFAULT_MODEL } = await import("../services/assistant/agent");
   delete process.env.OPENAI_MODEL;
   assert.equal(agentModel(), DEFAULT_MODEL);
   process.env.OPENAI_MODEL = "gpt-6-luna";
@@ -35,7 +35,7 @@ test("explicit Luna uses the existing Responses request and supported options", 
     const body = JSON.parse(String(init?.body));
     assert.equal(body.model, "gpt-6-luna");
     assert.equal(body.store, false);
-    assert.equal(body.reasoning.effort, "low");
+    assert.equal(body.reasoning.effort, "medium");
     assert.equal(body.parallel_tool_calls, false);
     assert.ok(body.tools.some((tool: { name?: string }) => tool.name === "saveBrief"));
     return providerStream();
@@ -57,7 +57,6 @@ beforeEach(async () => {
     const target = new URL(String(url));
     if (target.hostname === "db.example") return databaseFetch(db, target, init);
     calls++;
-    setToolRequest(JSON.parse(String(init?.body)));
     return provider(url, init);
   };
 });
@@ -219,6 +218,21 @@ test("timeout is persisted distinctly from cancellation and survives history rel
   assert.ok(failure!.data.elapsedMs >= 0);
 });
 
+test("timeout during a later provider call retains already finished planner steps", async () => {
+  const controller = new AbortController();
+  provider = async (_url, init) => {
+    if (calls === 1) return functionStream("readPlaces", { ids: ["place_001"] });
+    controller.abort(new DOMException("Fixture deadline", "TimeoutError"));
+    throw init?.signal?.reason;
+  };
+  const response = await handleChat(new Request(request(), { signal: controller.signal }), reference);
+  await response.text();
+  const reply = (await loadConversation(reference, conversation)).messages.at(-1)!;
+  const failure = reply.parts.find(part => part.type === "data-failure")?.data;
+  assert.equal(failure?.code, "timeout");
+  assert.equal(failure?.steps, 1);
+});
+
 test("provider output exhaustion remains a length failure rather than a timeout", async () => {
   provider = async () => new Response('data: '+JSON.stringify({ type: "response.created", response: { id: "resp_length", created_at: 1792713600, model: "gpt-6.1-terra" } })+'\n\n' +
     'data: '+JSON.stringify({ type: "response.incomplete", response: { incomplete_details: { reason: "max_output_tokens" }, usage: { input_tokens: 20, output_tokens: 10, total_tokens: 30 } } })+'\n\ndata: [DONE]\n\n', { headers: { "Content-Type": "text/event-stream" } });
@@ -299,4 +313,59 @@ for (const [code, reason, copy] of [
     assert.match(warnings.join("\n"), /chat_provider_error/); assert.match(warnings.join("\n"), new RegExp(code));
     assert.doesNotMatch(warnings.join("\n"), /private provider diagnostic|secret values|test-key/);
   } finally { console.warn = originalWarn; }
+});
+
+test("a recorded provider failure survives a later request cancellation", async () => {
+  const controller = new AbortController(), warn = console.warn;
+  console.warn = (...args: unknown[]) => {
+    if (args.some(arg => String(arg).includes('"event":"chat_provider_error"'))) controller.abort();
+  };
+  try {
+    provider = async () => Response.json({ error: { code: "rate_limit_exceeded", type: "rate_limit_error" } }, { status: 429 });
+    const response = await handleChat(new Request(request(), { signal: controller.signal }), reference);
+    await response.text();
+    const saved = await loadConversation(reference, conversation), failure = saved.messages.at(-1)!.parts.find(part => part.type === "data-failure");
+    assert.equal(failure?.data.code, "provider_limit");
+    assert.equal(failure?.data.providerReason, "rate_limit");
+    assert.equal(failure?.data.termination?.kind, "provider");
+    assert.equal(saved.messages.at(-1)?.metadata?.status, "failed");
+  } finally { console.warn = warn; }
+});
+
+test("invalid tool fields and terminal tool-choice violations are retained across reload", async () => {
+  const warnings: string[] = [], warn = console.warn;
+  console.warn = (...args: unknown[]) => { warnings.push(args.map(String).join(" ")); };
+  let sawCorrection = false;
+  try {
+    provider = async (_url, init) => {
+      if (calls === 1) return functionStream("createPlan", { plan: { days: "private-invalid-input-value", items: {}, notes: [], startDate: null }, authorizedItemIds: [] });
+      const body = JSON.parse(String(init?.body));
+      sawCorrection ||= JSON.stringify(body).includes('Expected tuple.');
+      return providerStream();
+    };
+    const saved = await send(), reply = saved.messages.at(-1)!;
+    const failure = reply.parts.find(part => part.type === "data-failure");
+    assert.equal(failure?.data.code, "incomplete", JSON.stringify({ failure: failure?.data, warnings }));
+    assert.equal(failure?.data.termination?.kind, "tool_choice");
+    assert.equal(failure?.data.inputFailure?.toolName, "createPlan");
+    assert.ok(failure?.data.inputFailure?.issues?.some(issue => issue.path === "plan.days"));
+    assert.equal(sawCorrection, true);
+    assert.match(warnings.join("\n"), /AI_ToolChoiceViolationError/);
+    assert.doesNotMatch(warnings.join("\n"), /private-invalid-input-value|test-key/);
+  } finally { console.warn = warn; }
+});
+
+test("an opaque provider stream failure after explicit cancellation retains the known stop reason", async () => {
+  const controller = new AbortController();
+  provider = async () => {
+    controller.abort(new DOMException("Stopped by user", "AbortError"));
+    throw new Error("opaque stream failure");
+  };
+  const source = request();
+  const response = await handleChat(new Request(source, { signal: controller.signal }), reference);
+  await response.text();
+  const reply = (await loadConversation(reference, conversation)).messages.at(-1)!;
+  const failure = reply.parts.find(part => part.type === "data-failure");
+  assert.equal(failure?.data.code, "cancelled");
+  assert.equal(failure?.data.termination?.kind, "abort");
 });

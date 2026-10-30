@@ -8,8 +8,8 @@ import { budgetSchema, budgetTotals, inspectBudget } from "../lib/budget";
 import { getBudget, saveBudget, handleBudget } from "../services/budgets";
 import { savePlan, getPlan } from "../services/plans";
 import { openSession } from "../services/workspace";
-import { beginTurn } from "../services/conversations";
-import { guideCatalog, readGuide, guidePrompt } from "../services/guides";
+import { beginTurn } from "../services/assistant/conversation-store";
+import { guideCatalog, readGuide, guidePrompt } from "../services/assistant/agent/guides";
 let db: PGlite;
 const oldFetch = globalThis.fetch;
 const env = { AGENT_WEB_SEARCH: process.env.AGENT_WEB_SEARCH, SUPABASE_URL: process.env.SUPABASE_URL, SUPABASE_SECRET_KEY: process.env.SUPABASE_SECRET_KEY };
@@ -33,6 +33,12 @@ function pricedBudget() {
 async function agent() {
   const turn = await beginTurn(reference, { conversationId: conversation, expectedLastId: null, retry: false, message: { id: "budget-user", text: "Plan Rome" } }, generation);
   return openSession(reference, conversation, turn.responseId, generation, new AbortController().signal);
+}
+
+// Internal session setup; public protocol coverage lives in planning-integration.
+async function review(a: Awaited<ReturnType<typeof agent>>) {
+  const api = a.artifacts!;
+  await api.editBudget((api.manifest() as { editToken: string }).editToken, [{ type: "recordReview" }]);
 }
 
 test("budget validation distinguishes unknown, estimates, exact prices and source applicability", () => {
@@ -107,6 +113,7 @@ test("agent rejects invented URL provenance and accepts actual search results", 
   a.recordWebSources!([b.entries[0].sources[0].url!]);
   await a.proposeBudget!(b, true);
   await a.propose(examplePlan(), []);
+  await review(a);
   await a.commit("Saved", ["budget-user"]);
   assert.ok((await getBudget(reference)).budget);
 });
@@ -123,6 +130,7 @@ test("unknown costs cannot publish until handled, including after Plan changes o
   await a.resolveBudgetGaps!([offlineGap]);
   const p = examplePlan(); p.days[0].title = "Different arrangement";
   await a.propose(p, []);
+  await review(a);
   assert.equal((await a.commit("Still premature", ["budget-user"]) as { saved: boolean }).saved, false);
   await a.reload();
   await a.propose(examplePlan(), []);
@@ -171,7 +179,8 @@ test("budget references are revalidated if a later plan proposal removes their t
   await a.proposeBudget!(b, true);
   const p = examplePlan(); p.days[0].itemIds = []; p.items = {};
   await a.propose(p, []);
-  await assert.rejects(a.commit("Save", ["budget-user"]), /A linked activity/);
+  await review(a);
+  await assert.rejects(a.commit("Save", ["budget-user"]), { code: "BUDGET_LINK" });
 });
 
 test("guides are allowlisted and initial instructions are loaded only when needed", () => {
@@ -179,6 +188,14 @@ test("guides are allowlisted and initial instructions are loaded only when neede
   for (const guide of guideCatalog) assert.ok(readGuide(guide.id).content.length > 100);
   assert.match(guidePrompt(true), /Required first-generation guide/);
   assert.match(guidePrompt(true), /Produce both an itinerary and a budget/);
+  for (const id of ["trip-details", "plan-quality", "first-plan"]) assert.ok(guidePrompt(true).includes(readGuide(id).content));
+  for (const id of ["plan-editing", "budget-research", "budget-editing", "routes-and-stays", "planning-documents"]) assert.ok(!guidePrompt(true).includes(readGuide(id).content));
+  for (const [phase, ids] of [["assemble", ["plan-editing", "routes-and-stays", "plan-quality"]], ["price", ["budget-research", "budget-editing"]], ["review", ["plan-quality", "plan-editing", "budget-editing"]]] as const) {
+    const prompt = guidePrompt(true, phase);
+    for (const id of ids) assert.ok(prompt.includes(readGuide(id).content));
+    assert.ok(prompt.includes(readGuide("first-plan").content), "Completion requirement persists across phases");
+    assert.ok(Buffer.byteLength(prompt) < 0.85 * ["trip-details", "plan-quality", "first-plan", "plan-editing", "budget-research", "budget-editing"].reduce((n, id) => n + Buffer.byteLength(readGuide(id).content), 0), "Phase guidance does not repeat the entire initial pack");
+  }
   assert.doesNotMatch(guidePrompt(false), /Produce both an itinerary and a budget/);
   assert.match(guidePrompt(false), /budget-editing/);
   const quality = readGuide("plan-quality").content;
@@ -218,8 +235,13 @@ test("plan changes after budget review cannot falsely keep it reviewed", async (
   const p = examplePlan(); p.days[0].title = "Changed after review";
   await a.propose(p, []);
   await a.resolveBudgetGaps!([offlineGap]);
-  await a.commit("Saved; budget needs review", ["budget-user"]);
-  assert.equal((await getBudget(reference)).needsReview, true);
+  await assert.rejects(a.commit("Cannot claim reviewed after a Plan change", ["budget-user"]), { code: "BUDGET_REVIEW_REQUIRED" });
+  assert.equal((await getPlan(reference)).plan!.days[0].title, examplePlan().days[0].title);
+  assert.equal((await getBudget(reference)).budget, null);
+  await review(a);
+  await a.commit("Reviewed against the updated Plan", ["budget-user"]);
+  assert.equal((await getBudget(reference)).needsReview, false);
+  assert.equal((await getPlan(reference)).plan!.days[0].title, "Changed after review");
 });
 
 test("Budget HTTP validation returns concise actionable errors", async () => {

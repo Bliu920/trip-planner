@@ -1,5 +1,11 @@
 # Budget
 
+## Incremental agent assembly
+
+October 29: model-facing createBudget now initializes only currency, scope, travelers, limit, assumptions and exclusions. lib/budget/initial.ts allocates empty entries. editBudget adds researched costs in small batches by day or category and supports individual corrections without rewriting accepted costs. Initialization stays unreviewed; the review command follows content edits and checks the full estimate against the effective itinerary. Partial costs retain existing source, price-gap, quantity and Plan-link checks.
+
+The first itinerary still needs cost entries before final save. Empty initialization feedback describes unfinished work rather than claiming that researched prices passed. Accepted working costs remain private until atomic commit. With the verified durable-draft flag enabled, the same-input Retry restores them across requests. Public inputs accept settings and semantic cost commands only. Complete objects and replacement operations remain internal domain capabilities. See [Agent](agent.md).
+
 Status: implemented with automated coverage. The Budget migration was applied on October 27, 2026. The original real-provider run saved six unknown costs. A separately authorized post-check run exercised gap feedback and follow-up, but failed acceptance: the agent confused the internal search alias with a missing workspace evidence tool and supplied no current input ID at commit. Search naming and current-input binding were then corrected and locally tested. These final corrections have not had another real-provider run.
 
 ## Responsibility
@@ -142,20 +148,22 @@ Consumer copy audit verification: lint, typecheck and 106 targeted tests passed.
 
 ## Day-view composition
 
-Updated 2026-10-28. `dayBudget` in `lib/budget/day.ts` is a pure projection over the existing Budget entries and the displayed day's ordered item IDs. It neither changes saved entries nor allocates costs by guesswork. Entries wholly linked to that day enter the subtotal exactly once, with quantity applied by budgetTotals. Bundles linked to items outside the day are shown separately and excluded from the subtotal. Unlinked trip costs, including stays, remain in the full Budget. Unknown prices remain unknown; missing links never mean free.
+Updated 2026-10-29. `dayBudget` in `lib/budget/day.ts` is a pure projection over Budget entries, the displayed day and the already-loaded Plan. Entries wholly linked to that day enter the subtotal exactly once, with quantity applied by budgetTotals. Cross-day food allowances are allocated by the number of covered meals on each day, provided every referenced item is a meal assigned to exactly one day and the displayed schedule matches that day. Shares are estimates, even when the full cost has a confirmed price. Their full allowance, sources and allocation basis remain visible. Integer-cent allocation conserves the full low/high trip amounts and keeps each daily range ordered. Saved entries and the trip total remain unchanged.
+
+Other cross-day bundles, such as combined tickets and passes, stay separate and excluded from the daily subtotal. Missing, mixed or ambiguous food references also remain unresolved rather than being silently divided. Unlinked trip costs, including stays, remain in the full Budget. Unknown prices remain unknown; missing links never mean free. Future AI estimates should prefer per-meal or per-day food entries, link the meals covered and avoid a second allowance for those same meals.
 
 `DayBudgetCard` is the public provider-connected surface in `lib/budget/ui/index.tsx`. It reuses BudgetProvider's existing session and subscriptions. `ui/day.tsx` renders the subtotal, scope, source links, estimated/confirmed state, unknown costs, shared costs and plan-change warning. Saved document evidence remains accessible through Full budget & sources. An unavailable Budget has an explicit state and a route to the full Budget controls. No second fetch/store is introduced.
 
-Workspace passes this surface into Plan's day-context slot. Budget owns all money logic; the Plan module supplies only item IDs and never imports the Budget store. Day totals are read-only views, not new database records. Reassigning an activity automatically changes the next derived daily subtotal without rewriting source evidence.
+Workspace passes this surface into Plan's day-context slot. Budget owns all money logic; the Plan module supplies the day ID and item IDs and never imports the Budget store. Day totals are read-only views, not new database records. Reassigning an activity automatically changes the next derived daily subtotal without rewriting source evidence. The provider supplies its existing Plan snapshot; an unmatched local schedule does not receive a speculative shared-food allocation.
 
-`tests/budget-day.test.ts` covers quantities, once-only counting, cross-day bundles, missing amounts, empty days and activity movement. Existing Budget edit/save/review behavior is unchanged.
+`tests/budget-day.test.ts` covers quantities, once-only counting, cross-day dining, unequal meal counts, cent conservation, party scope, indivisible bundles, stale references, missing amounts, empty days and activity movement. `tests/budget-day-ui.test.ts` verifies daily totals, transparent estimated shares, source access and empty/error/review states. Existing Budget edit/save/review behavior is unchanged.
 
 The day spending card is collapsed by default with only its subtotal, party scope and concise partial/review status visible. Price rows, source links, missing-price explanations, shared costs and the full Budget entry point remain inside the disclosure. This reduces default reading load without implying an incomplete subtotal is the whole day's cost.
 
 
-## V2 agent cost editing
+## Agent cost editing
 
-readBudget supports full, summary, category, entry and Plan-link selections from effective drafts or the pinned saved base. createBudget initializes an absent estimate; editBudget applies atomic scope/limit/assumption/exclusion or entry operations. Omitted fields preserve original values and evidence timestamps. recordReview comes after content operations and binds to the host's effective Plan under the existing review persistence model. Requirements-aware durable review fingerprints remain deferred.
+readBudget supports full, summary, category, entry and Plan-link selections from effective drafts or the pinned saved base. createBudget initializes an absent estimate; editBudget applies atomic scope/limit/assumption/exclusion or entry operations. Omitted fields preserve original values and evidence timestamps. The public review command (internal recordReview) comes after content operations and binds to the host's effective Plan under the existing review persistence model. Requirements-aware durable review fingerprints remain deferred.
 
 Structurally valid drafts can temporarily contain missing Plan links during coordinated edits; inspection exposes these blockers and final publication rejects newly staged invalid links. Routine costs still need evidence-backed numeric ranges, and existing exceptional missing-price recovery stays available. Price coverage and initial-draft readiness are derived findings, not new stored Budget fields.
 
@@ -166,3 +174,7 @@ Local synthetic fixture checks cover mixed estimates, exact prices, known free e
 Browser review used the real BudgetProvider and BudgetPanel with an isolated in-memory HTTP fixture. Verified desktop/mobile source expansion, keyboard toggling, calculation, missing-price explanation, document callback, and a spending-limit edit from €600 to €650 with the total unchanged. Default browsing has one table and no Reload control. Mobile Details targets remain 44px high, labels stay on one line and the page has no horizontal overflow. No real budget records or model calls were used. Temporary route removed after review.
 
 Final lint, typecheck and all eight focused tests passed after the last presentation refinements and fixture cleanup. Default-table screenshot: `/private/tmp/budget-table.png`.
+
+## Authoring review, October 30
+
+Authoring inputs use min/max, priceScope, sourceId and occurrence quantity; the adapter normalizes to the existing stored Budget scope in integer cents. Daily food allowances count days, not linked meals. Shared readiness flags a likely daily-unit mismatch and a range above the user limit as advisory findings, preserving honest unresolved proposals. The final-only reply receives exact host totals plus the material limit warning. Source handles preserve original URL/document version and checked time; new confirmed user prices require an updated Brief version.

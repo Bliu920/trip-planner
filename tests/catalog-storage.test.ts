@@ -5,8 +5,8 @@ import { PGlite } from "@electric-sql/pglite";
 import italy from "../data/italy.json";
 import photos from "../data/place-photos.json";
 import { photoUrl } from "../lib/catalog";
-import { photoSchema, photoManifestSchema, placeSchema } from "../services/catalog/validation";
-import { readCatalog } from "../services/catalog/database";
+import { photoSchema, photoManifestSchema, placeSchema } from "../services/places/catalog/validation";
+import { readCatalog } from "../services/places/catalog/database";
 
 const images = photoManifestSchema.parse(photos);
 

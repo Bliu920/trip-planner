@@ -53,34 +53,9 @@ export function examplePlan(): Plan {
     notes: [],
   };
 }
-let currentToolContext: { token: string; planExists: boolean; budgetExists: boolean } | null = null;
-/** Adapt regression scripts to the active V2 registry while retaining behavioral assertions. */
-export function setToolRequest(body: Record<string, unknown>) {
-  const tools = body.tools as { name?: string }[] | undefined;
-  if (!tools?.some(tool => tool.name === "createPlan")) { currentToolContext = null; return; }
-  const input = body.input as { role?: string; content?: unknown }[] | undefined;
-  const messages = input?.filter(item => item.role === "system" || item.role === "developer").map(item => typeof item.content === "string" ? item.content : (item.content as { text?: string }[])?.map(part => part.text ?? "").join("")) ?? [];
-  const system = String(body.instructions ?? messages.join("\n"));
-  const marker = system.indexOf('"artifactState":');
-  const manifest = system.slice(marker);
-  const token = manifest.match(/"editToken":"([^"]+)"/)?.[1];
-  if (!token) throw new Error("V2 fixture requires the current edit token in system context.");
-  currentToolContext = { token, planExists: /"plan":\{"exists":true/.test(manifest), budgetExists: /"budget":\{"exists":true/.test(manifest) };
-}
 let fixtureCall = 0;
+/** Transport only: no argument filling, renaming or compatibility conversion. */
 export function functionStream(name: string, input: unknown) {
-  if (currentToolContext) {
-    let args = input as Record<string, unknown>;
-    if (name === "proposePlan") {
-      name = currentToolContext.planExists ? "editPlan" : "createPlan";
-      if (name === "editPlan") args = { operations: [{ type: "replacePlan", plan: args.plan }], authorizedItemIds: args.authorizedItemIds };
-    } else if (name === "proposeBudget") {
-      name = currentToolContext.budgetExists ? "editBudget" : "createBudget";
-      if (name === "editBudget") args = { operations: [{ type: "replaceBudget", budget: args.budget, reviewed: args.reviewed }] };
-    } else if (name === "verifySave") name = "inspectChanges";
-    if (["createPlan", "editPlan", "createBudget", "editBudget", "createDocument", "editDocument", "saveBrief", "resolveBudgetGaps", "reloadWorkspace", "commit"].includes(name)) args = { editToken: currentToolContext.token, ...args };
-    input = args;
-  }
   const item = {
     type: "function_call",
     id: `fc_${name}_${++fixtureCall}`,

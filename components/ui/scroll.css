@@ -1,20 +1,47 @@
 /* Native scrolling, shared appearance. */
 @layer base {
-  :root { --scroll-thumb: #b8bcb5; --scroll-thumb-hover: #8a9186; }
-  :where(*) { scrollbar-width: thin; scrollbar-color: var(--scroll-thumb) transparent; }
+  :root {
+    --scroll-thumb: #b8bcb5;
+    --scroll-thumb-hover: #8a9186;
+  }
+  :where(*) {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scroll-thumb) transparent;
+  }
 
   /* Preserve the chat overrides. */
-  [data-slot="message-scroller-viewport"][data-autoscrolling] { scrollbar-color: transparent transparent; }
+  [data-slot="message-scroller-viewport"][data-autoscrolling] {
+    scrollbar-color: transparent transparent;
+  }
 
   @supports not (scrollbar-color: auto) {
-    ::-webkit-scrollbar { width: 8px; height: 8px; }
-    ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: var(--scroll-thumb); border: 2px solid transparent; background-clip: padding-box; border-radius: 8px; }
-    ::-webkit-scrollbar-thumb:hover { background-color: var(--scroll-thumb-hover); }
-    ::-webkit-scrollbar-corner { background: transparent; }
-    [data-slot="message-scroller-viewport"][data-autoscrolling]::-webkit-scrollbar-thumb { background: transparent; }
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: var(--scroll-thumb);
+      border: 2px solid transparent;
+      background-clip: padding-box;
+      border-radius: 8px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background-color: var(--scroll-thumb-hover);
+    }
+    ::-webkit-scrollbar-corner {
+      background: transparent;
+    }
+    [data-slot="message-scroller-viewport"][data-autoscrolling]::-webkit-scrollbar-thumb {
+      background: transparent;
+    }
   }
   @media (pointer: coarse), (forced-colors: active) {
-    :where(*) { scrollbar-width: auto; scrollbar-color: auto; }
+    :where(*) {
+      scrollbar-width: auto;
+      scrollbar-color: auto;
+    }
   }
 }

@@ -11,7 +11,7 @@ assert.match(checked, /Journeys fit the suggested times/); assert.match(checked,
 assert.match(checked, /openrouteservice/); assert.doesNotMatch(checked, /private-/);
 const partial = { ...report, status: "unverified" as const, legs: [{ ...report.legs[0], status: "unverified" as const, reason: "Confirm the entrance." }] };
 const unknown = renderToStaticMarkup(<JourneyStatus state={{ report: partial, pending: false, failed: false, loading: false }} />);
-assert.match(unknown, /Some journeys still need checking/); assert.match(unknown, /Museum to Restaurant/); assert.match(unknown, /partial check/);
+assert.match(unknown, /Travel between stops/); assert.match(unknown, /Museum to Restaurant/); assert.match(unknown, /partial check/);
 assert.doesNotMatch(unknown, /Journeys fit/);
 const lodging = renderToStaticMarkup(<JourneyStatus state={{ report: { ...report, status: "unverified", findings: [
   { code: "stay_coverage", severity: "warning", itemIds: [], message: "An overnight base is not assigned after Day 2. Confirm lodging or explain why no stay is needed." },
@@ -22,3 +22,13 @@ assert.match(failed, /Travel times remain unverified/); assert.doesNotMatch(fail
 const pending = renderToStaticMarkup(<JourneyStatus state={{ report: null, pending: true, failed: false, loading: false }} />);
 assert.match(pending, /not yet saved/); assert.doesNotMatch(pending, /Journeys fit/);
 console.log("Journey status checks passed");
+assert.match(checked, /Travel time estimates/);
+assert.match(checked, /Museum to Restaurant/);
+assert.match(checked, /Walk about 10 min/);
+assert.match(checked, /Allow 20 min including buffer/);
+assert.match(unknown, /Timing or route still needs checking/);
+const missing = renderToStaticMarkup(<JourneyStatus state={{ report: { ...partial, legs: [{ ...partial.legs[0], durationSeconds: null, reservedMinutes: null, distanceMeters: null }] }, pending: false, failed: false, loading: false }} />);
+assert.doesNotMatch(missing, /Travel time estimates|Walk about 0 min/);
+
+assert.match(unknown, /Some connections remain unverified/);
+assert.doesNotMatch(unknown, /Confirm the entrance/);

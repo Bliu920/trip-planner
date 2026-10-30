@@ -9,10 +9,10 @@ Updated October 28, 2026. Activity records observable actions inside assistant r
 | lib/activity/model.ts | Bounded display schema and safe history decoding |
 | lib/activity/history.tsx, activity.css | Expandable activity rows, source links and document opening |
 | lib/activity/index.ts | Public frontend API |
-| services/activity/index.ts | One recorder per generation, lifecycle reduction and persist-before-publish |
-| services/activity/summary.ts | Explicit projections from application results and native web search |
-| services/activity/storage.ts | Scoped persistence adapter |
-| services/chat/stream.ts | Feed observable SDK chunks into the recorder and finish remaining steps |
+| services/assistant/progress/index.ts | One recorder per generation, lifecycle reduction and persist-before-publish |
+| services/assistant/progress/summary.ts | Explicit projections from application results and native web search |
+| services/assistant/conversation-store/progress.ts | Scoped persistence adapter |
+| services/assistant/turn.ts | Feed observable SDK chunks into the recorder and finish remaining steps |
 | lib/chat/use-chat.ts | Preserve prior attempt entries while the SDK regenerates a reply |
 
 Each step entry has a stable ID, generation/attempt, title, status, concise detail, source links and document references. Optional run markers use kind=run, startedAt and terminal elapsedMs within the same bounded JSON store. activityEntries excludes these markers from visible steps; activityRun reads the newest run independently. Initial history is empty. Started entries update in place and terminal entries cannot regress. Source URLs allow only HTTP(S); raw errors and internal tool names are excluded from display. Research details report returned queries, matched places and sources, without inventing findings or implying source availability verifies every claim. Native web search does not expose a prose findings report; substantive findings remain in the assistant answer or linked research documents.

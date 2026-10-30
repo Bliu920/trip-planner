@@ -1,6 +1,6 @@
 import "server-only";
-import { checkJourneys, inspectGeoSources, journeySummary } from "@/services/feasibility";
-import { geoConfigured, resolvePlace } from "@/services/geo";
+import { checkJourneys, inspectGeoSources, journeySummary } from "@/services/places/feasibility";
+import { geoConfigured, resolvePlace, readVenuePosition } from "@/services/places/geo";
 import type { JourneyReport } from "@/lib/journeys";
 import { budgetSchema, inspectBudget, type Budget } from "@/lib/budget";
 import { BudgetReview } from "@/services/budgets";
@@ -18,14 +18,18 @@ import {
 } from "@/lib/documents/text";
 import type { DocumentSummary } from "@/lib/documents/types";
 import { places, inspectVenueSources } from "@/services/plans";
-import { loadCatalog, readPlaces } from "@/services/catalog";
+import { loadCatalog, readPlaces } from "@/services/places/catalog";
 import { describeCatalog, queryCatalog } from "@/lib/catalog";
 import { validateDocumentEdit, prepareDocument, readTextDocument } from "@/services/documents";
-import type { AgentEnvironment } from "@/services/agent/contracts";
+import type { AgentEnvironment } from "@/services/assistant/agent/contracts";
 import { workspaceRpc, WorkspaceError } from "./database";
 import { briefWriter } from "./brief";
 import { workspaceArtifacts } from "./artifacts";
 import { actionStateSchema } from "@/lib/actions";
+import { EvidenceIndex } from "./evidence";
+import { openDraft, type WorkingPayload } from "./drafts";
+import { journeyContext } from "./views";
+import { reviewPlanning, groupFindings } from "@/lib/planning-review";
 export type WorkspaceSnapshot = PlanSnapshot & {
   tripReference: string;
   legacyNotes: string;
@@ -55,12 +59,14 @@ export async function openSession(
     p_generation: generation,
   });
   let snapshot = start.snapshot;
+  let durable: Awaited<ReturnType<typeof openDraft>> = null;
   const priorAction = await workspaceRpc<{ action: unknown }>("planning_run_result", { p_trip: reference, p_operation: reply });
   let receipt = start.receipt;
   let context: TextDocument | null = snapshot.contextDocumentId
     ? await readTextDocument(reference, snapshot.contextDocumentId)
     : null;
   let proposed: Plan | null = null;
+  let planFindings: import("@/lib/plan").PlanFinding[] = [];
   let journeys: JourneyReport | null = null;
   let planRequired = false;
   let budgetRequired = false;
@@ -75,8 +81,11 @@ export async function openSession(
     proposedBudget!, JSON.stringify(proposed ?? snapshot.plan), snapshot.budget ?? null,
     !budgetReviewed && JSON.stringify(proposed ?? snapshot.plan) === JSON.stringify(snapshot.plan),
   );
+  const briefCheckpoints = new Map<string, number>();
   const initialGeneration = !snapshot.plan || Object.keys(snapshot.plan.items).length === 0;
   const retrievedUrls = new Set<string>();
+  const evidenceIndex = new EvidenceIndex();
+  evidenceIndex.saved(snapshot.plan, snapshot.budget ?? null);
   let catalog: ReturnType<typeof loadCatalog> | null = null;
   const readCatalog = () => catalog ??= loadCatalog().catch(error => { catalog = null; throw error; });
   const validateBudget = (budget: Budget, checkLinks = false) => {
@@ -84,6 +93,14 @@ export async function openSession(
     for (const entry of checked.entries) for (const evidence of entry.sources)
       if (Date.parse(evidence.checkedAt) > Date.now() + 300000) throw new WorkspaceError("Source checks cannot be dated in the future.", 400);
     const existing = snapshot.budget?.entries.flatMap(entry => entry.sources) ?? [];
+    for (const entry of checked.entries) {
+      const previous = snapshot.budget?.entries.find(old => old.id === entry.id);
+      const changedConfirmation = entry.pricing === "confirmed" && (!previous || previous.pricing !== "confirmed" || previous.unitMin !== entry.unitMin || previous.unitMax !== entry.unitMax || previous.quantity !== entry.quantity);
+      if (changedConfirmation && entry.sources.some(source => source.documentId) && !entry.sources.some(source => source.url)) {
+        const currentFact = entry.sources.some(source => source.documentId === contextId && source.documentRevision === (edits.has(contextId) ? (context?.contentRevision ?? 0) + 1 : briefCheckpoints.get(contextId)));
+        if (!currentFact) throw new WorkspaceError("Update the Travel brief with this user-confirmed price first, then cite its returned current document source. An unchanged older version cannot support a newly confirmed amount.", 400, "PRICE_FACT_SOURCE");
+      }
+    }
     for (const entry of checked.entries) for (const evidence of entry.sources) {
       const reused = existing.some(old => old.url === evidence.url && old.documentId === evidence.documentId && old.documentRevision === evidence.documentRevision && old.checkedAt === evidence.checkedAt && old.title === evidence.title && old.detail === evidence.detail);
       if (evidence.url && !retrievedUrls.has(evidence.url) && !reused)
@@ -112,10 +129,11 @@ export async function openSession(
     const meta = next.documents.find(document => document.id === next.contextDocumentId);
     if (edit && meta) context = { id: edit.id, name: edit.name, kind: edit.kind, revision: meta.revision, contentRevision: meta.contentRevision!, markdown: edit.markdown, mediaType: meta.mediaType };
     snapshot = next;
-    proposed = null; proposedBudget = null; edits.clear();
+    proposed = null; planFindings = []; proposedBudget = null; edits.clear();
   };
   const active = () => {
     signal.throwIfAborted();
+    durable?.assertWritable();
     if (receipt)
       throw new WorkspaceError(
         "This turn already saved its changes. Read the receipt; do not apply them again.",
@@ -162,16 +180,15 @@ export async function openSession(
       return result;
     },
     get context() {
-      const plan = proposed ?? snapshot.plan, budget = proposedBudget ?? snapshot.budget;
       const currentBrief = edits.get(contextId);
       const artifactState = environment.artifacts?.manifest() as { documents?: unknown } | undefined;
-      return { ...view(), view: "effective", plan: JSON.stringify(plan).length <= 20000 ? plan : undefined,
-        budget: JSON.stringify(budget ?? null).length <= 16000 ? budget : undefined,
+      return { ...view(), view: "effective", plan: undefined, budget: undefined,
         supportingContext: currentBrief ? { ...context, ...currentBrief, draft: true, proposedContentRevision: (context?.contentRevision ?? 0) + 1 } : context,
         documents: artifactState?.documents ?? snapshot.documents,
-        journeys: journeys ? journeySummary(journeys) : null, artifactState };
+        journeys: journeys ? journeyContext(journeys) : null, artifactState, workProgress: durable ? { resumed: durable.resumed } : null };
     },
     initialGeneration,
+    venuePosition: (query, evidenceId) => readVenuePosition(reference, query, evidenceId, signal),
     ...(geoConfigured() ? {
       resolvePlace: (query: import("@/lib/journeys").PositionQuery) => resolvePlace(reference, query, signal),
       getJourneys: async () => {
@@ -181,7 +198,10 @@ export async function openSession(
         return journeySummary(journeys);
       },
     } : {}),
-    recordWebSources(urls) { for (const url of urls) retrievedUrls.add(url); },
+    recordWebSources(urls, checkedAt) { for (const url of urls) retrievedUrls.add(url); return evidenceIndex.web(urls, checkedAt); },
+    evidence: id => evidenceIndex.get(id),
+    evidenceSources: () => evidenceIndex.list(),
+    documentEvidence: (id, revision, title) => evidenceIndex.document(id, revision, title),
     recordWebResearch() { budgetReview.recordResearch(); },
     async proposeBudget(budget, reviewed) {
       active();
@@ -224,10 +244,11 @@ export async function openSession(
       snapshot = result.snapshot;
       context = result.context;
       contextId = snapshot.contextDocumentId ?? contextId;
+      if (context) briefCheckpoints.set(contextId, context.contentRevision);
       return { saved: true, planningComplete: false, document: context, workspace: view() };
     },
     stageDocument,
-    async propose(plan, authorizedItemIds) {
+    async propose(plan, authorizedItemIds, allowScheduleConflicts = false) {
       active();
       planRequired = true;
       rejected.add("plan");
@@ -250,17 +271,19 @@ export async function openSession(
         p_sources: sources,
       });
       let routeReport: JourneyReport | null = null;
-      if (checked.plan && !checked.findings.some(finding => finding.severity === "error")) {
+      const blocking = () => checked.findings.some(finding => finding.severity === "error" && (!allowScheduleConflicts || !["overlap", "sequence", "journey_time"].includes(finding.code)));
+      if (checked.plan && !blocking()) {
         checked.findings.push(...await inspectGeoSources(reference, checked.plan, signal));
-        if (!checked.findings.some(finding => finding.severity === "error")) {
+        if (!blocking()) {
           routeReport = await checkJourneys(reference, checked.plan, places, signal);
           checked.findings.push(...routeReport.findings);
         }
       }
       const valid =
         !!checked.plan && !checked.findings.some((f) => f.severity === "error");
-      if (valid) { journeys = routeReport; rejected.delete("plan"); proposed = checked.plan; authorized = [...new Set([...authorized, ...authorizedItemIds])]; }
-      return { findings: checked.findings, valid, journeys: routeReport ? journeySummary(routeReport) : null };
+      const accepted = !!checked.plan && !blocking();
+      if (accepted) { planFindings = checked.findings; journeys = routeReport; rejected.delete("plan"); proposed = checked.plan; authorized = [...new Set([...authorized, ...authorizedItemIds])]; }
+      return { findings: groupFindings(checked.findings), valid, staged: accepted, journeys: routeReport ? journeyContext(routeReport) : null };
     },
     async reload() {
       active();
@@ -274,6 +297,7 @@ export async function openSession(
       context = latestContext;
       contextId = snapshot.contextDocumentId ?? contextId;
       proposed = null;
+      planFindings = [];
       journeys = null;
       saveBrief.reset();
       proposedBudget = null;
@@ -296,31 +320,30 @@ export async function openSession(
         throw new WorkspaceError(
           "Include the current input ID after fully handling this request.",
           400,
+          "INPUT_NOT_HANDLED",
         );
       if (handledInputIds.some((id) => !allowed.has(id)))
         throw new WorkspaceError(
           "Only current or pending input can be marked handled.",
           400,
+          "INPUT_NOT_PENDING",
         );
       if (!proposed && !proposedBudget && !edits.size)
         throw new WorkspaceError(
           "Stage a valid plan, budget or document before saving.",
           400,
+          "NOTHING_TO_SAVE",
         );
       if (rejected.size || planRequired && !proposed || budgetRequired && !proposedBudget || [...documentRequirements].some(id => !edits.has(id)))
         throw new WorkspaceError("A requested change is missing a valid proposal. Correct or re-propose every requested artifact after a rejection or reload before committing.", 400, "INCOMPLETE_CHANGES");
-      if (
-        proposed &&
-        inspectPlan(proposed, places, snapshot.plan, authorized).findings.some(
-          (f) => f.severity === "error",
-        )
-      )
+      const finalFindings = proposed ? inspectPlan(proposed, places, snapshot.plan, authorized).findings : [];
+      if (finalFindings.some(finding => finding.severity === "error"))
         throw new WorkspaceError(
           "The plan needs correction before saving.",
-          400,
+          400, "PLAN_INVALID", { findings: finalFindings },
         );
-      if (proposed && (!snapshot.plan || Object.keys(snapshot.plan.items).length === 0) && !proposedBudget?.entries.length)
-        throw new WorkspaceError("The first itinerary needs a budget. Research costs and proposeBudget, or record unknown costs with reasons when prices cannot be obtained.", 400);
+      const review = reviewPlanning(proposed ?? snapshot.plan, proposedBudget ?? snapshot.budget ?? null, initialGeneration && !!proposed, "commit", [], !!proposedBudget && !(budgetReviewed && reviewedPlan === JSON.stringify(proposed ?? snapshot.plan)), !!proposed && !!proposedBudget);
+      if (review.blockers.length) throw new WorkspaceError(review.blockers[0].message, 400, review.blockers[0].code, { review });
       if (proposed && inspectVenueSources(proposed, snapshot.plan, retrievedUrls).length)
         throw new WorkspaceError("Venue sources need checking before saving.", 400, "PLAN_SOURCE");
       if (proposed) {
@@ -380,7 +403,74 @@ export async function openSession(
     snapshot: () => snapshot, plan: () => proposed, budget: () => proposedBudget,
     receipt: () => receipt, edits, contextId: () => contextId, context: () => context,
     review: () => proposedBudget ? !(budgetReviewed && reviewedPlan === JSON.stringify(proposed ?? snapshot.plan)) : !!proposed || !!snapshot.budgetNeedsReview,
+    findings: () => planFindings,
   });
+  // Restore accepted work.
+  const capture = (): WorkingPayload => ({
+    schemaVersion: 1, plan: proposed, budget: proposedBudget, edits: [...edits.values()], contextId,
+    planRequired, budgetRequired, documentRequirements: [...documentRequirements], rejected: [...rejected], authorized,
+    budgetReviewed, reviewedPlan, budgetPolicy: budgetReview.snapshot(), briefCheckpoints: [...briefCheckpoints],
+    retrievedUrls: [...retrievedUrls], evidence: evidenceIndex.list(), artifact: environment.artifacts!.snapshotWork!(), mutations: [],
+  });
+  const restore = (payload: WorkingPayload) => {
+    proposed = payload.plan; proposedBudget = payload.budget; contextId = payload.contextId;
+    planRequired = payload.planRequired; budgetRequired = payload.budgetRequired;
+    edits.clear(); payload.edits.forEach(edit => edits.set(edit.id, edit));
+    documentRequirements.clear(); payload.documentRequirements.forEach(id => documentRequirements.add(id));
+    rejected.clear(); payload.rejected.forEach(key => rejected.add(key)); authorized = payload.authorized;
+    budgetReviewed = payload.budgetReviewed; reviewedPlan = payload.reviewedPlan; budgetReview.restore(payload.budgetPolicy);
+    briefCheckpoints.clear(); payload.briefCheckpoints.forEach(([id, revision]) => briefCheckpoints.set(id, revision));
+    retrievedUrls.clear(); payload.retrievedUrls.forEach(url => retrievedUrls.add(url)); evidenceIndex.restore(payload.evidence);
+    evidenceIndex.saved(snapshot.plan, snapshot.budget ?? null);
+    environment.artifacts!.restoreWork!(payload.artifact);
+  };
+  durable = receipt ? null : await openDraft(reference, reply, generation, signal);
+  if (durable?.confirmed) {
+    try {
+    restore(durable.confirmed);
+    if (snapshot.contextDocumentId && contextId !== snapshot.contextDocumentId) throw new WorkspaceError("The saved trip context changed. Start a new message to reconcile the changes.", 409, "PLAN_CONFLICT");
+    for (const edit of edits.values()) {
+      const existing = snapshot.documents.find(document => document.id === edit.id);
+      if ((existing?.revision ?? 0) !== edit.expectedRevision) throw new WorkspaceError("A file changed since this planning work was saved.", 409, "DOCUMENT_CONFLICT");
+      validateDocumentEdit(edit, existing);
+    }
+    if (proposed) {
+      rejectDirectEdits(proposed, snapshot.plan);
+      const checked = inspectPlan(proposed, places, snapshot.plan, authorized);
+      if (!checked.plan) throw new WorkspaceError("The saved planning work could not be restored safely.", 400, "DRAFT_INVALID");
+      planFindings = [...checked.findings, ...inspectVenueSources(proposed, snapshot.plan, retrievedUrls), ...await inspectGeoSources(reference, proposed, signal)];
+      const hard = planFindings.filter(finding => finding.severity === "error" && !["overlap", "sequence", "journey_time"].includes(finding.code));
+      if (hard.length) throw new WorkspaceError("Saved planning details need reconciliation before continuing.", 400, "DRAFT_INVALID", { findings: hard });
+      journeys = await checkJourneys(reference, proposed, places, signal); planFindings.push(...journeys.findings);
+    }
+    if (proposedBudget) validateBudget(proposedBudget);
+    const sourceRefs: SourceRef[] = [
+      ...(proposed ? sourcesIn(proposed) : []),
+      ...((proposedBudget as Budget | null)?.entries.flatMap(entry => entry.sources.flatMap(source => source.documentId && source.documentRevision ? [{ type: "document" as const, documentId: source.documentId, revision: source.documentRevision, section: null }] : [])) ?? []),
+    ].filter(source => source.type !== "document" || !edits.has(source.documentId));
+    await workspaceRpc("planning_sources", { p_trip: reference, p_sources: sourceRefs });
+    } catch (error) {
+      if (error instanceof WorkspaceError) throw error;
+      throw new WorkspaceError("Saved planning progress could not be restored safely. Your published itinerary is unchanged.", 400, "DRAFT_INVALID");
+    }
+  }
+  if (durable) {
+    const store = durable;
+    environment.workProgress = {
+      resumed: store.resumed,
+      lookup: (callId, fingerprint) => store.lookup(callId, fingerprint),
+      async checkpoint(callId, fingerprint, result, reset) {
+        const prior = store.confirmed;
+        try { await store.save(capture(), snapshot.revision, callId, fingerprint, result, reset); }
+        catch (error) {
+          if (prior) restore(prior);
+          else { proposed = null; proposedBudget = null; edits.clear(); planFindings = []; journeys = null; }
+          throw error;
+        }
+      },
+      verify: () => store.verify(),
+    };
+  }
   return environment;
 }
 

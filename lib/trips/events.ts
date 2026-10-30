@@ -11,18 +11,29 @@ export function notifyTripChanged(reference: string) {
       channel.postMessage(reference);
       channel.close();
     }
-  } catch { /* Cross-tab refresh is optional in restricted browsers. */ }
+  } catch {
+    /* Cross-tab refresh is optional in restricted browsers. */
+  }
 }
 
 export function subscribeTripChanges(reference: string, changed: () => void) {
   if (typeof window === "undefined" || typeof document === "undefined") return () => {};
-  const local = (event: Event) => { if ((event as CustomEvent<string>).detail === reference) changed(); };
-  const visible = () => { if (document.visibilityState === "visible") changed(); };
+  const local = (event: Event) => {
+    if ((event as CustomEvent<string>).detail === reference) changed();
+  };
+  const visible = () => {
+    if (document.visibilityState === "visible") changed();
+  };
   let channel: BroadcastChannel | null = null;
   try {
     if (typeof BroadcastChannel !== "undefined") channel = new BroadcastChannel(CHANNEL);
-    if (channel) channel.onmessage = event => { if (event.data === reference) changed(); };
-  } catch { /* Same-tab and focus refresh still work. */ }
+    if (channel)
+      channel.onmessage = (event) => {
+        if (event.data === reference) changed();
+      };
+  } catch {
+    /* Same-tab and focus refresh still work. */
+  }
   window.addEventListener(CHANGE_EVENT, local);
   window.addEventListener("focus", changed);
   document.addEventListener("visibilitychange", visible);

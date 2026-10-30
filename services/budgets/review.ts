@@ -21,6 +21,8 @@ export class BudgetReview {
 
   constructor(private readonly searchAvailable: boolean) {}
 
+  snapshot() { return { researchRound: this.researchRound, observations: [...this.observations] }; }
+  restore(value: ReturnType<BudgetReview["snapshot"]>) { this.researchRound = value.researchRound; this.observations = new Map(value.observations); }
   recordResearch() { this.researchRound++; }
   reset() { this.observations.clear(); }
 

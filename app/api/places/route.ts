@@ -1,5 +1,5 @@
 import { cacheLife } from "next/cache";
-import { loadCatalog } from "@/services/catalog";
+import { loadCatalog } from "@/services/places/catalog";
 
 async function cachedCatalog() {
   "use cache";

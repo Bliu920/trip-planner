@@ -21,6 +21,24 @@ test("sparse saved plans do not inherit preview budgets, photos or party assumpt
   assert.equal(result.days[0].stops[0].duration, "1 hr to 1 hr 30 min");
 });
 
+test("illustrative imagery stays out of venue details and free periods do not require a location", () => {
+  const plan = examplePlan();
+  const placeId = catalog[0].id;
+  const photo = { src: "/illustration.jpg", alt: "Illustrative travel scene", credit: "Photographer", creditUrl: "https://example.com/photo", match: "illustrative" as const };
+  let result = presentPlan(plan, catalog, { [placeId]: photo });
+  assert.equal(result.days[0].photo, photo, "existing day covers retain their separate visual role");
+  assert.equal(result.days[0].stops[0].photo, null);
+  result = presentPlan(plan, catalog, { [placeId]: { ...photo, match: "place" } });
+  assert.equal(result.days[0].stops[0].photo?.match, "place");
+  const item = plan.items["visit-1"];
+  if (item.kind !== "visit") throw new Error("Invalid fixture");
+  plan.items.free = { ...structuredClone(item), id: "free", kind: "free_time", location: null };
+  plan.days[0].itemIds.push("free");
+  assert.equal(presentPlan(plan, catalog).days[0].stops[1].locationState, "not_applicable");
+  item.location = { type: "area", label: "Historic center", basis: assumption };
+  assert.equal(presentPlan(plan, catalog).days[0].stops[0].locationState, "undecided");
+});
+
 test("stable item IDs follow reassignment and preserve unscheduled items, stays and notes", () => {
   const plan = examplePlan();
   plan.days[0].itemIds = [];

@@ -137,3 +137,13 @@ for (let index = 0; index < 6; index++) {
   assert.match(historyHtml, new RegExp(`href="https://example.com/source-${index}"`));
 }
 console.log("Rendered consecutive activity counts and preserved evidence successfully.");
+
+// One formatter governs live, completed, stopped and failed durations.
+const { WorkProgress } = require("../lib/work-progress") as typeof import("../lib/work-progress");
+for (const [active, status, expected] of [[true, "streaming", "Working · 5m 45s"], [false, "complete", "Worked for 5m 45s"], [false, "interrupted", "Stopped after 5m 45s"], [false, "failed", "Could not finish after 5m 45s"]] as const) {
+  const html = renderToStaticMarkup(<WorkProgress entries={[]} run={{ ...timing, elapsedMs: 345000 }} active={active} progress={null} status={status} reference="fixture" />);
+  assert.ok(html.includes(expected));
+  assert.doesNotMatch(html, /345s/);
+  assert.equal((html.match(/data-work-progress/g) ?? []).length, 1);
+}
+console.log("Rendered minute-based work durations successfully.");

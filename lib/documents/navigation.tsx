@@ -8,7 +8,15 @@ type OpenDocument = (reference: string, id: string) => void;
 const DocumentNavigation = createContext<OpenDocument | null>(null);
 
 // Share workspace navigation.
-export function DocumentNavigationProvider({ open, children }: { open: OpenDocument; children: ReactNode }) {
+export function DocumentNavigationProvider({
+  open,
+  children,
+}: {
+  open: OpenDocument;
+  children: ReactNode;
+}) {
   return <DocumentNavigation.Provider value={open}>{children}</DocumentNavigation.Provider>;
 }
-export function useDocumentNavigation() { return useContext(DocumentNavigation); }
+export function useDocumentNavigation() {
+  return useContext(DocumentNavigation);
+}

@@ -19,20 +19,46 @@ export function CopyId({ reference }: { reference: string }) {
   async function copy() {
     if (copying) return;
     setCopying(true);
-    try { await navigator.clipboard.writeText(reference); setCopied(true); }
-    catch { setCopied(false); setManual(true); }
-    finally { setCopying(false); }
+    try {
+      await navigator.clipboard.writeText(reference);
+      setCopied(true);
+    } catch {
+      setCopied(false);
+      setManual(true);
+    } finally {
+      setCopying(false);
+    }
   }
-  return <>
-    <Button ref={trigger} type="button" variant="ghost" className="cursor-pointer project-copy" disabled={copying} onClick={copy} aria-label={copied ? "Project ID copied" : "Copy project ID"} title="Copy project ID">
-      {copied ? <Check size={15} aria-hidden="true" /> : <Copy size={15} aria-hidden="true" />}<span aria-live="polite">{copied ? "Copied" : "Copy ID"}</span>
-    </Button>
-    <Dialog open={manual} onOpenChange={setManual}>
-      <DialogContent className="project-dialog" finalFocus={trigger}>
-        <DialogTitle>Project ID</DialogTitle>
-        <DialogDescription>Automatic copying is unavailable. Copy the selected ID.</DialogDescription>
-        <Input aria-label="Project ID" value={reference} readOnly onFocus={event => event.target.select()} className="project-id" />
-      </DialogContent>
-    </Dialog>
-  </>;
+  return (
+    <>
+      <Button
+        ref={trigger}
+        type="button"
+        variant="ghost"
+        className="cursor-pointer project-copy"
+        disabled={copying}
+        onClick={copy}
+        aria-label={copied ? "Project ID copied" : "Copy project ID"}
+        title="Copy project ID"
+      >
+        {copied ? <Check size={15} aria-hidden="true" /> : <Copy size={15} aria-hidden="true" />}
+        <span aria-live="polite">{copied ? "Copied" : "Copy ID"}</span>
+      </Button>
+      <Dialog open={manual} onOpenChange={setManual}>
+        <DialogContent className="project-dialog" finalFocus={trigger}>
+          <DialogTitle>Project ID</DialogTitle>
+          <DialogDescription>
+            Automatic copying is unavailable. Copy the selected ID.
+          </DialogDescription>
+          <Input
+            aria-label="Project ID"
+            value={reference}
+            readOnly
+            onFocus={(event) => event.target.select()}
+            className="project-id"
+          />
+        </DialogContent>
+      </Dialog>
+    </>
+  );
 }

@@ -3,8 +3,8 @@ import { after, before, test } from "node:test";
 import type { PGlite } from "@electric-sql/pglite";
 import { createDatabase, seed, reference, conversation, generation, otherTrip } from "./chat-fixture";
 import { parsePlaceIds, togglePlace } from "../lib/place-references/model";
-import { validatePlaceIds, hydratePlaceReferences, placeReferenceContext } from "../services/place-references";
-import { readTurn } from "../services/chat/validation";
+import { validatePlaceIds, hydratePlaceReferences, placeReferenceContext } from "../services/places/place-references";
+import { readTurn } from "../services/assistant/request";
 import italy from "../data/italy.json";
 import type { ChatSnapshot, StoredMessage } from "../lib/chat/types";
 

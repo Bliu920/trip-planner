@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { after, afterEach, before, beforeEach, test } from "node:test";
 import type { PGlite } from "@electric-sql/pglite";
-import { getDocument, handleCleanup, handleDocuments, readDocumentContent } from "../services/documents";
+import { getDocument, handleDocuments, readDocumentContent } from "../services/documents";
 import type { DocumentRef, DocumentSummary } from "../lib/documents/types";
 import { createDatabase, databaseFetch, seed, reference, otherTrip, conversation, generation } from "./chat-fixture";
 
@@ -13,12 +13,12 @@ let removalFails: boolean;
 let onRead: (() => Promise<void>) | undefined;
 const pdf = Buffer.from("%PDF-1.7\nPrivate booking\n%%EOF");
 const originalFetch = globalThis.fetch;
-const environment = Object.fromEntries(["SUPABASE_URL", "SUPABASE_SECRET_KEY", "DOCUMENT_CLEANUP_SECRET"].map(key => [key, process.env[key]]));
+const environment = Object.fromEntries(["SUPABASE_URL", "SUPABASE_SECRET_KEY"].map(key => [key, process.env[key]]));
 before(async () => { db = await createDatabase(); });
 after(async () => { await db.close(); });
 beforeEach(async () => {
   await seed(db); stored = new Map(); removalFails = false; onRead = undefined;
-  Object.assign(process.env, { SUPABASE_URL: "https://db.example", SUPABASE_SECRET_KEY: "sb_secret_test", DOCUMENT_CLEANUP_SECRET: "document-cleanup-test-secret-at-least-32-characters" });
+  Object.assign(process.env, { SUPABASE_URL: "https://db.example", SUPABASE_SECRET_KEY: "sb_secret_test" });
   globalThis.fetch = async (input, init) => {
     const url = new URL(String(input));
     assert.equal(url.hostname, "db.example");
@@ -64,9 +64,6 @@ async function begin(ids: string[], expected: string | null = null, chat = conve
 }
 async function finish(id: string, chat = conversation) {
   await db.query("select public.chat_write_reply($1,$2,$3,$4,'Saved reply','complete')", [reference, chat, id, generation]);
-}
-async function cleanup() {
-  return handleCleanup(new Request("http://localhost/api/internal/documents/cleanup", { method: "POST", headers: { authorization: `Bearer ${process.env.DOCUMENT_CLEANUP_SECRET}` } }));
 }
 
 test("library stores unbound files, scopes listing and never exposes Storage paths", async () => {
@@ -146,33 +143,23 @@ test("deletion revokes access and selections, preserves history and blocks resur
   assert.equal((await begin([], turn.responseId)).documents.length, 0);
 });
 
-test("cleanup retries failures and removes late uploads after all signed grants expire", async () => {
+test("manual deletion retries failures and removes late uploads after signed grants expire", async () => {
   const document = await ready(); removalFails = true;
   assert.equal((await handleDocuments(request("DELETE", { revision: document.revision }), reference, document.id)).status, 202);
   assert.equal(stored.has(document.id), true);
-  assert.equal((await cleanup()).status, 503);
+  assert.equal((await handleDocuments(request("DELETE", { revision: document.revision }), reference, document.id)).status, 202);
   removalFails = false;
-  await db.query("update public.attachments set cleanup_at = now() - interval '1 second' where id = $1", [document.id]);
-  assert.equal((await cleanup()).status, 200);
+  assert.equal((await handleDocuments(request("DELETE", { revision: document.revision }), reference, document.id)).status, 202);
   assert.equal(stored.has(document.id), false);
   assert.equal((await getDocument(reference, document.id)).status, "deleting");
   stored.set(document.id, pdf); // A previously granted upload arrives late.
-  await db.query("update public.attachments set signed_until = now() - interval '1 second', cleanup_at = now() - interval '1 second' where id = $1", [document.id]);
-  assert.equal((await cleanup()).status, 200);
+  await db.query("update public.attachments set signed_until = now() - interval '1 second' where id = $1", [document.id]);
+  assert.equal((await handleDocuments(request("DELETE", { revision: document.revision }), reference, document.id)).status, 200);
   assert.equal(stored.has(document.id), false);
   assert.equal((await getDocument(reference, document.id)).status, "deleted");
   assert.deepEqual(await (await handleDocuments(request("GET"), reference)).json(), []);
 });
 
-test("cleanup expires unfinished uploads but preserves saved files with no message references", async () => {
-  const incomplete = await reserve(); stored.set(incomplete.id, pdf);
-  const saved = await ready();
-  await db.query("update public.attachments set last_activity_at = now() - interval '25 hours', signed_until = now() - interval '1 second'");
-  assert.equal((await cleanup()).status, 200);
-  assert.equal((await getDocument(reference, incomplete.id)).status, "deleted");
-  assert.equal((await getDocument(reference, saved.id)).status, "ready");
-  assert.equal(stored.has(saved.id), true);
-});
 
 test("finalization and content reads cannot revive or return a concurrently deleted document", async () => {
   const document = await reserve(); stored.set(document.id, pdf);
@@ -188,28 +175,26 @@ test("finalization and content reads cannot revive or return a concurrently dele
   await assert.rejects(readDocumentContent(reference, saved.id), /deleted/);
 });
 
-test("quotas include unfinished deletion until cleanup has actually completed", async () => {
+test("quotas include unfinished deletion until a manual retry completes it", async () => {
   const document = await ready();
   for (let i = 1; i < 30; i++) await reserve();
   await handleDocuments(request("DELETE", { revision: document.revision }), reference, document.id);
   const extra = { id: randomUUID(), name: "booking.pdf", mediaType: "application/pdf", size: pdf.length, source: "library" };
   assert.equal((await handleDocuments(request("POST", extra), reference)).status, 400);
-  await db.query("update public.attachments set signed_until = now() - interval '1 second', cleanup_at = now() - interval '1 second' where id = $1", [document.id]);
-  await cleanup();
+  await db.query("update public.attachments set signed_until = now() - interval '1 second' where id = $1", [document.id]);
+  assert.equal((await handleDocuments(request("DELETE", { revision: document.revision }), reference, document.id)).status, 200);
   assert.equal((await handleDocuments(request("POST", extra), reference)).status, 200);
 });
 
-test("new metadata operations and cleanup reject unauthorized access", async () => {
+test("metadata operations reject unauthorized access", async () => {
   const document = await ready();
   const foreignOrigin = new Request(`http://localhost/api/trips/${reference}/documents`, { headers: { origin: "https://other.example" } });
   assert.equal((await handleDocuments(foreignOrigin, reference)).status, 403);
   assert.equal((await handleDocuments(request("PATCH", { name: "x", revision: document.revision }), otherTrip, document.id)).status, 404);
-  assert.equal((await handleCleanup(new Request("http://localhost/api/internal/documents/cleanup", { method: "POST" }))).status, 401);
   for (const role of ["anon", "authenticated"]) {
     await db.exec(`set role ${role}`);
     for (const table of ["message_documents", "conversation_documents"]) await assert.rejects(db.query(`select * from public.${table}`), /permission denied/);
     await assert.rejects(db.query("select public.document_list($1)", [reference]), /permission denied/);
-    await assert.rejects(db.query("select public.document_cleanup_batch()"), /permission denied/);
     await db.exec("reset role");
   }
   await assert.rejects(db.query("delete from public.trips where reference = $1", [reference]), /foreign key constraint/);
@@ -231,4 +216,16 @@ test("migration preserves legacy IDs, paths and historical message associations"
     await legacy.query("delete from public.conversations where id = $1", [conversation]);
     assert.equal((await legacy.query("select * from public.attachments where id = $1", [id])).rows.length, 1);
   } finally { await legacy.close(); }
+});
+
+test("retirement removes maintenance functions and columns without expiring files", async () => {
+  const incomplete = await reserve();
+  const saved = await ready();
+  await db.query("update public.attachments set last_activity_at = now() - interval '25 hours'");
+  const functions = await db.query<{ batch: unknown; abandoned: unknown }>("select to_regprocedure('public.document_cleanup_batch(integer)') as batch, to_regprocedure('public.document_abandoned(uuid)') as abandoned");
+  assert.deepEqual(functions.rows[0], { batch: null, abandoned: null });
+  const columns = await db.query("select column_name from information_schema.columns where table_schema='public' and ((table_name='attachments' and column_name='cleanup_at') or (table_name='document_writes' and column_name='cleaned'))");
+  assert.equal(columns.rows.length, 0);
+  assert.equal((await getDocument(reference, incomplete.id)).status, "pending");
+  assert.equal((await getDocument(reference, saved.id)).status, "ready");
 });

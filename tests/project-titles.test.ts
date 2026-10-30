@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
-import { generateProjectTitle } from "../services/project-titles";
-import { handleTrip } from "../services/trips";
+import { generateProjectTitle } from "../services/projects/project-titles";
+import { handleTrip } from "../services/projects/trips";
 
 const originalFetch = globalThis.fetch;
 const envKeys = ["OPENAI_API_KEY", "OPENAI_TITLE_MODEL", "OPENAI_MODEL", "SUPABASE_URL", "SUPABASE_SECRET_KEY"] as const;

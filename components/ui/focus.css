@@ -4,7 +4,18 @@
 :focus-visible {
   outline: none !important;
 }
-:is(button, a, input, textarea, select, summary, [role="button"], [role="tab"], [role="menuitem"], [data-slot]):focus-visible {
+:is(
+  button,
+  a,
+  input,
+  textarea,
+  select,
+  summary,
+  [role="button"],
+  [role="tab"],
+  [role="menuitem"],
+  [data-slot]
+):focus-visible {
   box-shadow: none !important;
 }
 

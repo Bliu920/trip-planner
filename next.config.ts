@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
-    "/api/trips/*/chat": ["./services/guides/documents/*.md"],
+    "/api/trips/*/chat": ["./services/assistant/agent/guides/documents/*.md"],
   },
   // Redirect before rendering.
   redirects() {

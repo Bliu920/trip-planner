@@ -4,7 +4,7 @@ Implemented October 27, 2026. This is a small application-owned instruction libr
 
 ## Boundary
 
-`services/guides/index.ts` exposes `guidePrompt(initialGeneration)` and `readGuide(id)`. `catalog.ts` owns the allowlisted IDs, titles and when-to-use descriptions. `documents/*.md` owns the complete trusted instructions. The runtime does not accept arbitrary paths, URLs, user-authored replacements or SQL-stored copies. Updating a guide is a reviewed application change.
+`services/assistant/agent/guides/index.ts` exposes `guidePrompt(initialGeneration, phase)` and `readGuide(id)`. `catalog.ts` owns the allowlisted IDs, titles and when-to-use descriptions. `documents/*.md` owns the complete trusted instructions. The runtime does not accept arbitrary paths, URLs, user-authored replacements or SQL-stored copies. Updating a guide is a reviewed application change.
 
 These guides are separate from Library documents. Supporting context contains durable user-specific requirements; research documents contain evidence. Neither can override application guidance. Raw user input stays in Chat. This module adds no user document store and no second copy of uploaded files.
 
@@ -13,10 +13,15 @@ These guides are separate from Library documents. Supporting context contains du
 | Phase | Automatic context | On-demand context |
 | --- | --- | --- |
 | Every request | Small shared guardrails, guide directory, current UTC time and existing workspace snapshot | `readGuide(id)` loads a selected document as a tool result |
-| First itinerary | Full trip-details, plan-quality and first-plan guides when saved Plan is absent or has no items | First-plan instructs the agent to load plan-editing and budget-research |
+| Initial requirements | first-plan, trip-details and plan-quality | Other applicable guides load on demand |
+| Initial assembly | first-plan, plan-quality, plan-editing and routes-and-stays | Other applicable guides load on demand |
+| Initial pricing | first-plan, budget-research and budget-editing | Other applicable guides load on demand |
+| Initial final review | first-plan, plan-quality, plan-editing and budget-editing | Other applicable guides load on demand |
 | Existing Plan | Directory only | Plan edits, budget research and budget updates load relevant guides |
 | Pending Budget price checks | Full budget-gaps guide attached to createBudget/editBudget/commit tool results | Research and editing guides remain available |
 | Retry after saved operation | Existing receipt in workspace | Agent must explain the receipt rather than replay edits |
+
+Automatic packs follow accepted progress: no Plan, incomplete daily assembly, unfinished pricing, then reviewed costs. The full first-plan workflow remains present in every initial phase. These packs replace repeated inclusion of all six long guides; they do not remove active tool or provider reasoning history.
 
 Detection is project-based. Creating another chat does not make an existing itinerary a first generation. If another writer changes the project during a run, reload returns current artifacts and clears staged edits; initial instructions do not authorize overwriting the new state.
 
@@ -32,7 +37,7 @@ The first-plan guide gives the overall workflow. plan-quality owns itinerary com
 - `budget-gaps`: targeted follow-up, immediate price evidence capture, bounded unresolved-cost handling and honest partial totals. Automatically attached with pending checks.
 - `budget-editing`: preserving unrelated costs, price refresh, changed itinerary reconciliation and review acknowledgment.
 
-Existing `services/agent/guidance.ts` retains common source trust, catalog restrictions, save-receipt rules, conflict behavior and reply style. Task-specific detail moved into the guides. The model stays on the existing Vercel AI SDK and configured model; no new model-selection system was introduced.
+Existing `services/assistant/agent/context/instructions.ts` retains common source trust, catalog restrictions, save-receipt rules, conflict behavior and reply style. Task-specific detail moved into the guides. The model stays on the existing Vercel AI SDK and configured model; no new model-selection system was introduced.
 
 ## Runtime and verification
 
@@ -77,7 +82,7 @@ The same recovery follow-up routes price research through researchWeb, which ret
 
 ## V2 tool guidance
 
-Trusted guides now use createPlan/createBudget when absent, editPlan/editBudget for existing artifacts, createDocument/editDocument for Library text, and inspectChanges for review and final save verification. Changes require the current token from refreshed effective state; there are no mandatory redundant rereads. The initial workflow applies to itinerary requests, not unrelated document-only work. Partial edits preserve unrelated facts and costs, while coordinated changes still publish once through the existing commit.
+Trusted guides now use createPlan/createBudget when absent, editPlan/editBudget for existing artifacts, createDocument/editDocument for Library text, and inspectChanges for review and final save verification. The host supplies mechanical tokens at execution; retired versioned callers are not retained. There are no mandatory redundant rereads. The initial workflow applies to itinerary requests, not unrelated document-only work. Partial edits preserve unrelated facts and costs, while coordinated changes still publish once through the existing commit.
 
 
 ## Concrete meal choices
@@ -95,3 +100,9 @@ Research records findings, direct source URLs, actual checked dates, applicabili
 ## Routes and stays guide
 
 October 29, 2026: routes-and-stays is discoverable for researched hotel selection and map-supported timing changes. first-plan, plan-quality, plan-editing and common guidance point to it. It separates web identity/prices from positioning/routing, requires fixed-booking preservation and explains automatic checks, budgets, uncertainty, unsupported transport and corrective action.
+
+## Booking requirements as display facts
+
+October 30, 2026: Catalog booking requirements are system-owned information in Explore place details and Plan activity details. The primary guidance excludes automatic reservation-policy or live-availability research, booking reminders and planning delays caused by these flags. Explicit user requests may authorize informational booking research; no reservation is made. First-plan, plan-quality, routes-and-stays and the research helper no longer demand booking checks as routine work. Plan-editing retains correction of already-known stale instructions without launching new booking research. Actual user-reported bookings and fixed commitments retain their existing evidence and preservation rules. Ordinary researched Budget estimates remain required. The catalog requirement no longer generates an agent-facing validation warning.
+
+`tests/booking-details.test.ts` covers non-blocking flag behavior, true/false/unknown detail projection, rendered card omission and real activity-detail display without authored notes, plus the prompt boundary. Existing Plan tests cover commitment protection. Prompt tests verify declared instructions, not a guarantee about every model response; no paid model run was used for this change.

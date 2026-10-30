@@ -26,7 +26,7 @@ The brief remains plain text. References never get serialized into its editable 
 - `lib/place-references/view.tsx`: provider, add/remove toggle, chips, expansion and detail loading.
 - `lib/place-references/references.css`: scoped controls and responsive chip styling.
 - `lib/place-references/index.ts`: public frontend API.
-- `services/place-references/index.ts`: bounded server adapter for ID validation, snapshot hydration and model context. This uses the small-module exception because the complete adapter is under 80 lines.
+- `services/places/place-references/index.ts`: bounded server adapter for ID validation, snapshot hydration and model context. This uses the small-module exception because the complete adapter is under 80 lines.
 
 Explore owns the full place detail dialog. It accepts optional actions, allowing this module to reuse details without duplicating them. Explore passes the module's toggle into its card and dialog. The standalone Explore page remains read-only when no message draft provider is present. Workspace messages reuse the same chips with removal disabled by omission, because sent messages are historical input.
 

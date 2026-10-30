@@ -3,7 +3,7 @@ import test from "node:test";
 import italy from "../data/italy.json";
 import { filterPlaces, durationLabel } from "../lib/catalog";
 import type { Place as PlanningPlace } from "../lib/plan";
-import { getPlaces } from "../services/catalog";
+import { getPlaces } from "../services/places/catalog";
 
 test("catalog retains every source record and is compatible with the planner", () => {
   const places = getPlaces();

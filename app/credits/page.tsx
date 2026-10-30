@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { cacheLife } from "next/cache";
 import { PhotoCredits } from "@/lib/photo-credits";
-import { loadCatalog, loadDayCoverPhotos } from "@/services/catalog";
+import { loadCatalog, loadDayCoverPhotos } from "@/services/places/catalog";
 
 export const metadata: Metadata = { title: "Image credits | Trip planner" };
 

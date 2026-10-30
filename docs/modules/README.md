@@ -2,11 +2,16 @@
 
 This directory is the shared home for maintained, self-contained feature guides. Each guide describes the current implementation, its boundaries and the operational work needed to use it. Task files record temporary coordination; module guides remain useful after a task ends.
 
+October 30, 2026: backend paths now follow assistant/, projects/ and places/ groups inside services/. See the [service directory guide](../../services/README.md) for ownership and reading order. Existing module entry points, URLs, persistence and application behavior are preserved; maintained guide paths follow the new locations.
+
+Relocation verification: lint, typecheck, all 494 offline tests and production build passed in an isolated source snapshot. All nine runtime guide documents are present in the chat route's output trace. Agent registration lint restrictions and all ten evaluation fingerprint service-directory paths were checked after the move. These checks made no paid model requests or remote database writes.
+
 ## Index
 
 | Module | Guide | Status |
 |---|---|---|
-| Library | [library.md](library.md) | Implemented; migration and scheduler deployment pending |
+| Frontend structure | [frontend.md](frontend.md) | Reading order, feature ownership and formatting |
+| Library | [library.md](library.md) | Implemented; migration deployment pending |
 | Plan | [plan.md](plan.md) | Implemented; hosted migration pending |
 | Budget | [budget.md](budget.md) | Implemented; migration applied; live price research acceptance failed |
 | Guiding documents | [guides.md](guides.md) | Implemented; automatic first guide and on-demand task guides |
@@ -19,6 +24,7 @@ This directory is the shared home for maintained, self-contained feature guides.
 | Project titles | [project-titles.md](project-titles.md) | Implemented; live model and local integration verified |
 | Project header | [project-header.md](project-header.md) | Implemented and verified locally |
 | Audio input | [audio-input.md](audio-input.md) | Implemented; original verification record preserved |
+| Shared dropdowns | [dropdowns.md](dropdowns.md) | Unified option fields, action menus and ring-free styling |
 
 Use [the module template](_template.md) for new guides. Library, Audio input, Plan and Agent use this shared home. The old `docs/audio-input.md` path redirects here so existing task links remain useful. New module guides should be created here directly.
 

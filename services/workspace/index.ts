@@ -1,9 +1,9 @@
+import { checkOrigin } from "@/services/assistant/request";
 import "server-only";
 import {
-  checkOrigin,
   checkReference,
   ConversationError,
-} from "@/services/conversations";
+} from "@/services/assistant/conversation-store";
 import { workspaceRpc, WorkspaceError } from "./database";
 import type { WorkspaceSnapshot } from "./session";
 export { openSession } from "./session";

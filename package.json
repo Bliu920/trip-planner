@@ -7,6 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "format": "prettier --write \"{lib,components}/**/*.{ts,tsx,css}\" \"app/**/*.{tsx,css}\"",
+    "format:check": "prettier --check \"{lib,components}/**/*.{ts,tsx,css}\" \"app/**/*.{tsx,css}\"",
     "typecheck": "next typegen && tsc --noEmit",
     "test": "node --import tsx --conditions=react-server --test tests/*.test.ts"
   },
@@ -37,6 +39,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.4.3",
+    "prettier": "3.9.10",
     "tailwindcss": "^4",
     "tsx": "^4.23.15",
     "typescript": "^5"

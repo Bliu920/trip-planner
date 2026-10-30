@@ -6,7 +6,7 @@ Status: reviewed acceptance scenarios for the implemented agent, not measured su
 
 Use this collection to test whether the assistant can turn diverse requests into useful, honest, saved travel plans and make precise revisions without losing information. A case is a behavioral specification with a representative reply and state assertions, not a transcript to copy or a model reasoning trace. A reply can differ substantially and still pass. Conversely, a plausible reply cannot pass when the saved state or evidence contradicts it.
 
-- [Initial planning: I01 to I23](initial.md), including a [worked saved outcome for I02](worked-example.md)
+- [Initial planning: I01 to I23](initial.md), including an [I02 saved-outcome review worksheet](worked-example.md)
 - [Follow-up: F01 to F24](follow-up.md)
 - [Evidence, interruptions and tool recovery: R01 to R15](recovery.md)
 
@@ -14,7 +14,7 @@ Each case has a single primary distinction; shared quality requirements still ap
 
 ## Authority and change review
 
-The implemented behavior is defined by [agent guidance](../../../services/agent/guidance.ts), the [guide directory](../../../services/guides/catalog.ts), trusted [guide documents](../../../services/guides/documents/), [tool adapters](../../../services/agent/tools.ts) and receipt-backed workspace behavior. The old V2 implementation plan is historical design context. Current tools are implemented; these scenarios do not establish that the model uses them correctly.
+The implemented behavior is defined by [agent guidance](../../../services/assistant/agent/guidance.ts), the [guide directory](../../../services/assistant/guides/catalog.ts), trusted [guide documents](../../../services/assistant/guides/documents/), [tool adapters](../../../services/assistant/agent/tools.ts) and receipt-backed workspace behavior. The old V2 implementation plan is historical design context. Current tools are implemented; these scenarios do not establish that the model uses them correctly.
 
 Review affected runnable cases whenever workflow, evidence, timing, routes, storage or default behavior changes. Preserve case IDs and keep old reports tied to their original hashes. Do not weaken criteria merely because the current agent fails them.
 
@@ -40,7 +40,7 @@ Tool lines describe semantic obligations, not a required call transcript. A tool
 
 ## Running and judging
 
-1. Freeze date, initial artifacts, messages, available tools and evidence; record the case ID, dataset and prompt/guide/implementation revision. Supply the same initial state to each compared version.
+1. Fix initial artifacts, messages, available tools and controlled evidence; record the actual runtime clock, case ID, dataset and prompt/guide/implementation revision. This runner does not freeze time. Supply the same explicit calendar input and initial state to compared versions, and account for the execution date when checking defaults.
 2. Run offline with controlled tool responses for repeatable semantics and fault paths. Inspect the final persisted artifacts, observable tool inputs and results, source lineage, action state and traveller-facing reply. Scripted provider responses exercise plumbing only; they do not show that an autonomous model selected the right actions. Use live provider runs separately, in isolated projects and only when authorized, for autonomous planning and current research. Record actual sources and checked times; never count an unrun test as passed.
 3. Apply case-specific assertions plus shared expectations. Record each as pass, fail or not evaluable, with the evidence and artifact difference. Any invented place/price/booking, lost protected fact, silent unrelated change, false save claim, duplicate publication or lost saved brief is a hard failure. Incomplete or absent material cost coverage cannot count as a complete budget. A correct partial response in an outage can pass its resilience case while failing normal complete-first-draft quality.
 4. A human judges intent fit, practical geography and connections, pacing, meaningful daily coverage, source applicability and quality of explanation. Report hard failures separately from the human quality verdict; do not collapse missing evidence into pass, or use a single score to conceal blockers. If an LLM judge is used, audit its decisions against the actual artifacts and evidence with human reviewers.

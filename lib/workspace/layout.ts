@@ -15,7 +15,9 @@ export type LayoutAction =
   | { type: "availability"; artifact: Artifact; exists: boolean | null; error: string };
 export const initialLayout: ContentLayout = {
   contentOpen: false,
-  view: "documents", plan: { exists: null, error: "" }, budget: { exists: null, error: "" },
+  view: "documents",
+  plan: { exists: null, error: "" },
+  budget: { exists: null, error: "" },
   planOpened: false,
 };
 
@@ -23,7 +25,12 @@ export function contentLayout(state: ContentLayout, action: LayoutAction): Conte
   if (action.type === "open") return state.contentOpen ? state : { ...state, contentOpen: true };
   if (action.type === "close") return { ...state, contentOpen: false };
   if (action.type === "select") {
-    if ((action.view === "plan" || action.view === "budget") && !state[action.view].exists && !state[action.view].error) return state;
+    if (
+      (action.view === "plan" || action.view === "budget") &&
+      !state[action.view].exists &&
+      !state[action.view].error
+    )
+      return state;
     return { ...state, contentOpen: true, view: action.view };
   }
   const current = state[action.artifact];
@@ -34,6 +41,9 @@ export function contentLayout(state: ContentLayout, action: LayoutAction): Conte
   if (action.artifact === "plan" && exists && !state.planOpened) {
     return { ...next, contentOpen: true, view: "plan", planOpened: true };
   }
-  if (state.view === action.artifact && !exists && !action.error) { next.view = "documents"; next.contentOpen = false; }
+  if (state.view === action.artifact && !exists && !action.error) {
+    next.view = "documents";
+    next.contentOpen = false;
+  }
   return next;
 }

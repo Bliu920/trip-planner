@@ -2,8 +2,8 @@ import "server-only";
 import { createHash } from "node:crypto";
 import { fileFormat, uploadFormat } from "@/lib/file-types";
 import { fileError, type DocumentSource } from "@/lib/documents/types";
-import { documentId, documentRecord, documentRpc, DocumentError, getDocument, storageRequest, publicDocument, type StoredDocument } from "./database";
-import { BUCKET, deleteBytes, readBytes, signedUpload } from "./storage";
+import { documentId, documentRecord, documentRpc, DocumentError, getDocument, publicDocument, type StoredDocument } from "./database";
+import { deleteBytes, readBytes, signedUpload } from "./storage";
 
 export async function reserveDocument(reference: string, body: Record<string, unknown>) {
   if (typeof body.id !== "string" || typeof body.name !== "string" || typeof body.mediaType !== "string" || !["chat", "starter", "library"].includes(body.source as DocumentSource)) throw new DocumentError("File details are invalid.", 400);
@@ -45,7 +45,7 @@ export async function readDocumentContent(reference: string, id: string) {
   if (current.revision !== record.revision) throw new DocumentError("This file changed while loading. Reload and try again.", 409);
   return { document: publicDocument(record), bytes };
 }
-export async function purgeDocument(record: StoredDocument) {
+async function purgeDocument(record: StoredDocument) {
   if (record.status === "deleted") return;
   await deleteBytes(record);
   // Retain outstanding grant paths.
@@ -53,16 +53,6 @@ export async function purgeDocument(record: StoredDocument) {
 }
 export async function deleteDocument(reference: string, id: string, revision: number) {
   const record = await documentRpc<StoredDocument>("document_mutate", { p_trip: reference, p_id: id, p_action: "delete", p_revision: revision });
-  try { await purgeDocument(record); } catch { /* Durable deletion remains queued. */ }
+  try { await purgeDocument(record); } catch { /* Keep access revoked for manual retry. */ }
   return getDocument(reference, id);
-}
-export async function cleanupDocuments() {
-  const records = await documentRpc<StoredDocument[]>("document_cleanup_batch", { p_limit: 10 });
-  const results = await Promise.allSettled(records.map(purgeDocument));
-  const abandoned = await documentRpc<{ id: string; path: string }[]>("document_abandoned", {});
-  const cleaned = await Promise.allSettled(abandoned.map(async write => {
-    await storageRequest(`/storage/v1/object/${BUCKET}`, "DELETE", { prefixes: [write.path] });
-    await documentRpc("document_abandoned", { p_done: write.id });
-  }));
-  return { processed: records.length + abandoned.length, failed: [...results, ...cleaned].filter(result => result.status === "rejected").length };
 }

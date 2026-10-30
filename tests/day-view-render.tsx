@@ -13,6 +13,7 @@ const require = createRequire(import.meta.url);
 require.extensions[".css"] = () => {};
 const { DayCard, Timeline, TripSummary } = require("../lib/plan/presentation/components") as typeof import("../lib/plan/presentation/components");
 const { PlanPresentation } = require("../lib/plan/presentation") as typeof import("../lib/plan/presentation");
+const { DayMap } = require("../lib/plan/day-view/map") as typeof import("../lib/plan/day-view/map");
 const breakfast: Stop = { id: "breakfast", title: "Breakfast", kind: "food", time: "morning", duration: "Duration unknown", category: "meal", note: "" };
 const museum: Stop = { ...breakfast, id: "museum", title: "Museum", kind: "sight", duration: "2 hr", coordinates: [41.89, 12.49], photo: { src: "/museum.jpg", alt: "Museum exterior", credit: "Photographer", creditUrl: "https://example.com/photo" }, sources: [{ label: "Opening hours", url: "https://example.com/hours" }] };
 const day: Day = { id: "day", title: "Rome sights", date: null, photo: museum.photo!, walkingLabel: null, stayLabel: null, stops: [breakfast, museum] };
@@ -22,14 +23,14 @@ const edited: string[] = [];
 const html = renderToStaticMarkup(<StopDetails stop={museum} onEdit={id => edited.push(id)} />);
 assert.match(html, /<img[^>]*alt="Museum exterior"/);
 assert.match(html, /href="https:\/\/example.com\/hours"/);
-assert.match(html, /Edit activity/);
-assert.match(html, /class="dp-detail-body" role="region" aria-label="About Museum" tabindex="0"/);
-assert.ok(html.indexOf("Edit activity") < html.indexOf('class="dp-detail-body"'), "editing stays outside the scrolling information region");
+assert.match(html, /<section class="dp-details" aria-label="Details: Museum" tabindex="0">/);
+assert.doesNotMatch(html, /aria-label="About Museum"/, "the entire card is one keyboard-scrollable region");
+assert.match(html, /Edit activity/, "the editing action remains inside the card's scroll content");
 const samePhoto = renderToStaticMarkup(<StopDetails stop={museum} cover={day.photo} />);
 assert.doesNotMatch(samePhoto, /<img/, "the same day-cover image is not repeated next to itself");
 const unknown = renderToStaticMarkup(<StopDetails stop={breakfast} />);
 assert.match(unknown, /Duration not set/);
-assert.match(unknown, /Location not set/);
+assert.match(unknown, /Place not chosen yet/);
 assert.doesNotMatch(unknown, /Free|Confirmed|<a /);
 
 // Real restaurant facts remain usable even without a map pin.
@@ -40,8 +41,24 @@ const restaurantStop = presentPlan(restaurantPlan, []).days[0].stops[1];
 const restaurantHtml = renderToStaticMarkup(<StopDetails stop={restaurantStop} />);
 assert.match(restaurantHtml, /Fictional Cafe A, 1 Fictional Street, Rome/);
 assert.match(restaurantHtml, /href="https:\/\/example.com\/cafe-a"/);
-assert.match(restaurantHtml, /Map pin not available/);
-assert.doesNotMatch(restaurantHtml, /Location not set/);
+assert.match(restaurantHtml, /Not located on map/);
+assert.doesNotMatch(restaurantHtml, /Place not chosen yet/);
+const resting = renderToStaticMarkup(<StopDetails stop={{ ...breakfast, kind: "stay", category: "rest", locationState: "not_applicable" }} />);
+assert.doesNotMatch(resting, /Place not chosen|Not located on map/);
+const emptyMap = renderToStaticMarkup(<DayMap places={[]} selected={null} selectionRequest={0} onSelect={() => {}} />);
+assert.equal(emptyMap, "");
+const mapped = renderToStaticMarkup(<DayMap places={[{ id: museum.id, title: museum.title, coordinates: [41.89, 12.49], number: 2 }]} selected="breakfast" selectionRequest={1} onSelect={() => {}} />);
+assert.match(mapped, /aria-label="Day map"/);
+assert.match(mapped, /1 mapped place/);
+assert.doesNotMatch(mapped, /maps\/dir|Locations are not set/);
+for (const detailed of [false, true]) {
+  const timelineHtml = renderToStaticMarkup(<Timeline stops={day.stops} detailed={detailed} onStop={() => {}} />);
+  assert.doesNotMatch(timelineHtml, /<img|pp-stopThumbnail|pp-stopBody/, "timeline images and their layout wrappers are removed in both modes");
+  assert.match(timelineHtml, /data-kind="sight"/);
+  assert.match(timelineHtml, /data-kind="food"/);
+}
+const illustrative = { ...museum, photo: { ...museum.photo!, match: "illustrative" as const } };
+assert.doesNotMatch(renderToStaticMarkup(<StopDetails stop={illustrative} />), /<img/, "illustrative photos never stand in for a venue");
 
 // Exercise independent commands.
 function buttons(node: ReactNode): { [key: string]: unknown }[] {

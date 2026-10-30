@@ -1,9 +1,9 @@
+import { handleConversationDocument } from "../services/assistant/request";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { after, afterEach, before, beforeEach, test } from "node:test";
 import type { PGlite } from "@electric-sql/pglite";
-import { resolveDocuments } from "../services/chat/documents";
-import { handleConversationDocument } from "../services/conversations";
+import { resolveDocuments } from "../services/assistant/agent/context/messages";
 import { createDatabase, databaseFetch, seed, reference, otherTrip, conversation } from "./chat-fixture";
 import type { DocumentRef } from "../lib/documents/types";
 

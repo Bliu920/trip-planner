@@ -1,22 +1,22 @@
 # Locations, routes and feasibility
 
-Implemented locally with the forward migration applied to the existing Supabase project. Verified documentation on October 29, 2026. Provider access remains untested until HEIGIT_API_KEY is configured.
+Implemented locally with the forward migration applied to the existing Supabase project. Provider access was verified in the October 30 audit and repeated during the location optimization. See the verification record below.
 
 ## Boundaries
 
-- services/geo/index.ts orchestrates cached position/route lookups. client.ts owns bounded HTTPS calls and response validation. matching.ts owns conservative address matching and coordinate/distance helpers. store.ts owns trip-scoped immutable evidence RPCs and canonical cache keys.
+- services/places/geo/index.ts orchestrates cached position/route lookups. client.ts owns bounded HTTPS calls and response validation. matching.ts owns conservative address matching and coordinate/distance helpers. store.ts owns trip-scoped immutable evidence RPCs and canonical cache keys.
 - lib/journeys/types.ts and model.ts own transport contracts and pure movement derivation. index.ts exposes the public API. view.tsx owns independent day loading and honest route status. lib/plan/timing.ts supplies shared local-calendar windows, including maximum ranged durations.
-- services/feasibility/index.ts derives and checks the final Plan, with at most three concurrent workers, 24 cache-miss provider calls and a 12-second per-check deadline. routes.ts owns point resolution and geo-reference validation. http.ts serves cache-only day reports through the public module entry.
+- services/places/feasibility/index.ts derives and checks the final Plan, with at most three concurrent workers, 24 cache-miss provider calls and a 12-second per-check deadline. routes.ts owns point resolution and geo-reference validation. http.ts serves cache-only day reports through the public module entry.
 
 These modules keep the existing Plan, Budget and Library authoritative. Research notes/Planning decisions preserve useful evidence and choices, not copied route reports or another schedule.
 
 ## Evidence and trust
 
-The private geo_evidence table stores application UUID, trip reference, canonical cache key, position/route kind, normalized payload, checked timestamp and expiry. Position TTL is seven days; route TTL is one day. Rows are immutable through the exposed RPCs. The service role alone can read/insert; normal clients cannot query them. A Plan trigger rejects map references belonging to another trip. Host validation also binds venue position references to the exact researched name/address/city and coordinates. API references use SourceRef type geo, never fabricated web URLs. Pelias result identifiers are not durable application identities.
+The private geo_evidence table stores application UUID, trip reference, canonical cache key, position/route kind, normalized payload, checked timestamp and expiry. Position TTL is seven days; route TTL is one day. Rows are immutable through the exposed RPCs. The service role alone can read/insert; normal clients cannot query them. A Plan trigger rejects map references belonging to another trip. Host validation also binds venue position references to the exact researched name/address/city and coordinates. Semantic editPlan accepts optional venue.geoEvidenceId or hotel.geoEvidenceId. The host reads fresh trip-scoped matched evidence and supplies coordinates and geo sources; model-authored coordinates remain disallowed. Omitting the ID can reuse a fresh exact cached match, without making a provider search. Changed identity/address, stale, fabricated or cross-trip explicit references are rejected. Authoring reads preserve the selected reference. API references use SourceRef type geo, never fabricated web URLs. Pelias result identifiers are not durable application identities.
 
 Researched hotel and restaurant locations share identity/address/web-evidence fields and optional geoEvidenceId, while preserving existing restaurant JSON. New non-null researched venue coordinates require a host position reference. Hotels are only valid as stays, restaurants as meals; public attractions remain supplied records. Users' specified properties and explicitly provisional base areas retain their existing semantics. Unknown positions are never substituted with area centers. Stored legacy coordinates remain readable, but unreferenced researched coordinates are not used as verified routing positions.
 
-Matching requires Italy, an applicable city/local administration, address/venue precision, street tokens and the house number. Common English/Italian city names are normalized. A score or first candidate alone does not establish identity. Multiple distinct exact-address positions remain ambiguous. This conservative first version can leave uncommon address formats unresolved; web identity and geo positioning remain separate evidence.
+Matching requires Italy, an applicable city/local administration, address/venue precision, the normalized full street name and exact house number including suffixes. Known postal city/province/country suffixes are removed from the address, without discarding meaningful street words, street types or numbers. Common English/Italian city names are normalized. Name-first queries receive one normalized address-only fallback when no precise match was found. Multiple conflicting exact matches or an HTTP failure do not trigger speculative fallback. Each actual request consumes the shared request allowance; an interrupted fallback is not cached as a negative result. A score or first candidate alone does not establish identity. Multiple distinct exact-address positions remain ambiguous. This conservative first version can leave uncommon address formats unresolved; web identity and geo positioning remain separate evidence.
 
 ## Routing and time
 
@@ -32,7 +32,7 @@ Agent proposals, manual saves and final commit invoke the same checker. Known co
 
 When the key is present, resolvePlace and getJourneys join the existing tool registry. The latter checks the current accepted Plan; AI cannot validate a subset instead of the final itinerary. Tools receive concise labels, evidence IDs, distances, estimates, allowances and findings, with geometry removed. Existing web-source checks still apply to hotel identity and prices.
 
-GET /api/trips/[reference]/journeys?day=...&revision=... loads only the requested day's cached geometry/check results, without making provider requests. Revision mismatches reject stale views. Day context distinguishes checked, unverified and conflict, shows partial mapped walking and suggested allowances, and draws route geometry with provider attribution. Geometry cannot leak into the AI context through the journey report. Pending client edits suppress stale saved-route results.
+GET /api/trips/[reference]/journeys?day=...&revision=... loads only the requested day's cached geometry/check results, without making provider requests. Revision mismatches reject stale views. Day context distinguishes checked, unverified and conflict, shows each obtained leg's map-estimated minutes/distance separately from its buffered allowance, and shows partial mapped walking and suggested allowances, and draws route geometry with provider attribution. Unverified connections use a compact partial-coverage note; concrete timing conflicts remain visible. Geometry cannot leak into the AI context through the journey report. Pending client edits suppress stale saved-route results.
 
 ## Configuration and verification
 
@@ -45,3 +45,16 @@ Official references checked October 29, 2026:
 - [Directions requests and return types](https://giscience.github.io/openrouteservice/api-reference/endpoints/directions/requests-and-return-types)
 - [Routing options including ferries](https://giscience.github.io/openrouteservice/api-reference/endpoints/directions/routing-options)
 - [Pelias response and confidence semantics](https://github.com/pelias/documentation/blob/master/response.md)
+
+
+## October 30 optimization verification
+
+The audit recommendations were implemented within existing modules. Position lookups use the position-v2-address-fallback cache key so old negative results do not suppress the improved search. Fresh matched position-v1 results remain reusable, preserving already available map positions. Existing references remain readable; route keys and TTLs are unchanged.
+
+Safe events geo_request, geo_position_match, geo_cache and geo_lookup distinguish network requests, matching, cache reuse and request-budget stops. They include operation/strategy, HTTP status, outcome and duration where applicable, never the key, authorization headers, raw response bodies or address queries. HTTP 200 alone is not evidence of a matched position.
+
+A six-request live probe on October 30 used five position searches and one walking route. Hotel Pantheon matched on address fallback; Albergo del Senato matched with its full postal address; Pantharei remained ambiguous after both strategies. The two resolved hotel positions produced a 63.1-meter, 45.5-second walking route with 2.73-meter maximum endpoint snapping. These are a targeted public-address sample, not proof of complete trip coverage.
+
+Tests now exercise actual registered editPlan input validation and execution for mapped hotel/meal creation, persistence and manual editing, plus missing/foreign/expired/changed references, postal address matching, fallback/request budgets, old negative-cache bypass and partial UI estimates. See [execution record](../tasks/main-location-api-optimization/001-implementation.md).
+
+Provider semantics checked against [Pelias search](https://github.com/pelias/documentation/blob/master/search.md) and [response fields](https://github.com/pelias/documentation/blob/master/response.md) on October 30, 2026. Application buffering remains separate from provider estimates.
