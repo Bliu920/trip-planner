@@ -308,11 +308,6 @@
   background: var(--pp-event-tint);
   color: var(--pp-event-accent);
 }
-.pp-stop:is([data-kind="sight"], [data-kind="garden"], [data-kind="viewpoint"])
-  .pp-stopContent
-  > strong {
-  color: var(--pp-event-accent);
-}
 .pp-dayFooter {
   display: flex;
   align-items: center;
